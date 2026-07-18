@@ -4,9 +4,14 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#08130f" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>EMBERWATCH — 地城守望</title>
   <meta name="description" content="6×8 縱向俯視棋盤格塔防遊戲" />
-  <link rel="stylesheet" href="styles.css?v=20260718-scene-drop-5px-v10" />
+  <link rel="manifest" href="manifest.webmanifest?v=20260718-portrait-v1" />
+  <link rel="apple-touch-icon" href="assets/processed/icons/player-warrior-icon-45.png" />
+  <link rel="stylesheet" href="styles.css?v=20260718-mobile-portrait-v12" />
 </head>
 <body>
   <main id="app" class="app game-blur-target">
@@ -105,6 +110,20 @@
     </section>
   </main>
 
+  <button id="fullscreenButton" class="mobile-fullscreen-button" type="button" aria-label="進入全螢幕" aria-pressed="false">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" />
+    </svg>
+  </button>
+
+  <section id="orientationGuard" class="orientation-guard" aria-hidden="true">
+    <div class="orientation-card">
+      <span class="orientation-phone" aria-hidden="true">▯</span>
+      <strong>請將手機轉回直式</strong>
+      <small>遊戲已暫停，轉回直式後即可繼續</small>
+    </div>
+  </section>
+
   <section id="titleScreen" class="title-screen" aria-label="遊戲標題畫面">
     <div class="title-vignette"></div>
     <div class="title-content">
@@ -134,6 +153,6 @@
   </section>
 
   <script src="game-config.js?v=20260718-player-place-volume-v12"></script>
-  <script src="game.js?v=20260718-audio-play-mode-v14"></script>
+  <script src="game.js?v=20260718-mobile-fullscreen-v15"></script>
 </body>
 </html>

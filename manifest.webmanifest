@@ -1,0 +1,21 @@
+{
+  "name": "EMBERWATCH — 地城守望",
+  "short_name": "EMBERWATCH",
+  "description": "6×8 縱向俯視棋盤格塔防遊戲",
+  "lang": "zh-Hant",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "portrait-primary",
+  "background_color": "#05090c",
+  "theme_color": "#08130f",
+  "icons": [
+    {
+      "src": "assets/processed/icons/player-warrior-icon-45.png",
+      "sizes": "1254x1254",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

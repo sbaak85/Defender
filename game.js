@@ -144,7 +144,8 @@
     continue: document.querySelector("#continueButton"), countdown: document.querySelector("#countdownOverlay"), toast: document.querySelector("#toastLayer"),
     result: document.querySelector("#resultOverlay"), resultKicker: document.querySelector("#resultKicker"), resultTitle: document.querySelector("#resultTitle"),
     resultSubtitle: document.querySelector("#resultSubtitle"), resultKills: document.querySelector("#resultKills"), resultTime: document.querySelector("#resultTime"),
-    restart: document.querySelector("#restartButton"), deckCoinPile: document.querySelector("#deckCoinPile"), deckCoinText: document.querySelector("#deckCoinText")
+    restart: document.querySelector("#restartButton"), deckCoinPile: document.querySelector("#deckCoinPile"), deckCoinText: document.querySelector("#deckCoinText"),
+    fullscreen: document.querySelector("#fullscreenButton"), orientationGuard: document.querySelector("#orientationGuard")
   };
 
   let audio = null;
@@ -162,6 +163,7 @@
   let selectedDefender = null;
   let selectedEnemyId = null;
   let selectedWall = false;
+  let orientationPausedByGuard = false;
   let resultAction = "restart";
   const rangeSurfaceTiles = new Map();
 
@@ -1521,6 +1523,84 @@
     syncUI(); sfx("click"); toast(state.paused ? "遊戲已暫停" : "繼續防守");
   }
 
+  function fullscreenElement() {
+    return document.fullscreenElement || document.webkitFullscreenElement || null;
+  }
+
+  function isStandaloneDisplay() {
+    return window.matchMedia?.("(display-mode: standalone)").matches || window.navigator.standalone === true;
+  }
+
+  function isMobileGameDevice() {
+    return window.matchMedia?.("(hover: none) and (pointer: coarse)").matches ?? false;
+  }
+
+  function isBlockedMobileLandscape() {
+    return isMobileGameDevice() && window.innerWidth > window.innerHeight;
+  }
+
+  async function tryLockPortrait() {
+    if (!screen.orientation?.lock) return;
+    try { await screen.orientation.lock("portrait-primary"); }
+    catch { /* Browsers may only allow orientation lock in installed/fullscreen mode. */ }
+  }
+
+  function syncFullscreenUI() {
+    const active = Boolean(fullscreenElement()) || isStandaloneDisplay();
+    document.body.classList.toggle("mobile-fullscreen-active", active);
+    if (!els.fullscreen) return;
+    els.fullscreen.classList.toggle("is-active", active);
+    els.fullscreen.setAttribute("aria-pressed", String(active));
+    els.fullscreen.setAttribute("aria-label", active ? "退出全螢幕" : "進入全螢幕");
+  }
+
+  async function toggleMobileFullscreen() {
+    if (fullscreenElement()) {
+      const exit = document.exitFullscreen || document.webkitExitFullscreen;
+      if (exit) await Promise.resolve(exit.call(document)).catch(() => {});
+      try { screen.orientation?.unlock?.(); } catch { /* Orientation unlock is optional. */ }
+      return;
+    }
+    if (isStandaloneDisplay()) {
+      toast("目前已是全螢幕模式");
+      await tryLockPortrait();
+      return;
+    }
+    const root = document.documentElement;
+    const request = root.requestFullscreen || root.webkitRequestFullscreen;
+    if (!request) {
+      toast("此瀏覽器不支援網頁全螢幕；可加入主畫面後啟動");
+      return;
+    }
+    try {
+      await Promise.resolve(request.call(root));
+      await tryLockPortrait();
+    } catch {
+      toast("無法進入全螢幕；請確認瀏覽器允許此功能");
+    }
+  }
+
+  function syncOrientationGuard() {
+    const blocked = isBlockedMobileLandscape();
+    document.body.classList.toggle("orientation-blocked", blocked);
+    els.orientationGuard?.setAttribute("aria-hidden", String(!blocked));
+    if (blocked) {
+      if (!orientationPausedByGuard && state?.running && !state.ended && !state.paused) {
+        orientationPausedByGuard = true;
+        state.paused = true;
+        syncUI();
+      }
+      return;
+    }
+    if (!orientationPausedByGuard) return;
+    orientationPausedByGuard = false;
+    if (state?.running && !state.ended) {
+      state.paused = false;
+      syncUI();
+      toast("已恢復直式遊玩");
+    }
+  }
+
   function cycleSpeed() {
     if (!state) return;
     state.speedIndex = (state.speedIndex + 1) % SPEEDS.length;
@@ -1858,6 +1938,7 @@
   els.repair.addEventListener("click", repairWall);
   els.recycle.addEventListener("click", recycleSelected);
   els.pause.addEventListener("click", togglePause);
+  els.fullscreen?.addEventListener("click", toggleMobileFullscreen);
   els.speed.addEventListener("click", cycleSpeed);
   els.mute.addEventListener("click", toggleGlobalAudio);
   els.debug.addEventListener("click", e => { e.stopPropagation(); setDebugMenu(els.debugMenu.hidden); });
@@ -1890,12 +1971,18 @@
     if (e.code === "Escape") setDebugMenu(false);
   });
   document.addEventListener("visibilitychange", () => { if (document.hidden && state?.running && !state.ended) { state.paused = true; syncUI(); } });
+  document.addEventListener("fullscreenchange", syncFullscreenUI);
+  document.addEventListener("webkitfullscreenchange", syncFullscreenUI);
+  window.addEventListener("orientationchange", () => setTimeout(syncOrientationGuard, 80));
+  window.addEventListener("resize", syncOrientationGuard, { passive: true });
 
   resetGame();
   syncAudioUI();
   syncBgmUI();
   syncCollisionUI();
   syncGridUI();
+  syncFullscreenUI();
+  syncOrientationGuard();
   preloadAttackAudio();
   loadSprites();
 })();

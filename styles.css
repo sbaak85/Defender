@@ -88,7 +88,7 @@ button { font: inherit; }
 }
 .bgm-toggle.is-off { color: #c4cbc8; border-color: rgba(190,205,198,.22); background: linear-gradient(#3a4541, #1b2320); box-shadow: inset 0 1px rgba(255,255,255,.06); }
 
-.battlefield-shell { position: relative; width: min(94vw, 620px); margin:calc(var(--tile) * -1.08 + 5px) auto 0; filter: drop-shadow(0 26px 42px rgba(0,0,0,.5)); }
+.battlefield-shell { position: relative; width: min(94vw, 620px); margin:calc(var(--tile) * -1.08 + 11px) auto 0; filter: drop-shadow(0 26px 42px rgba(0,0,0,.5)); }
 .dungeon-crown {
   position: absolute; z-index: 5; top: -29px; left: -8px; right: -8px; height: 36px; display: flex; align-items: center; justify-content: center;
   border: 2px solid #3a4c46; border-radius: 14px 14px 3px 3px; background: linear-gradient(#182620,#080e0c); box-shadow: inset 0 2px rgba(255,255,255,.06);
@@ -1417,6 +1417,45 @@ body {
 @keyframes toastIn{0%{opacity:0;transform:translateY(12px) scale(.9)}15%,75%{opacity:1;transform:none}100%{opacity:0;transform:translateY(-12px)}}
 @keyframes resultIn{0%{opacity:0;transform:translateY(30px) scale(.82)}100%{opacity:1;transform:none}}
 
+.mobile-fullscreen-button {
+  display:none;
+  position:fixed;
+  right:max(12px,env(safe-area-inset-right));
+  bottom:max(12px,env(safe-area-inset-bottom));
+  z-index:8000;
+  width:44px;
+  height:44px;
+  padding:10px;
+  border:1px solid rgba(225,190,112,.72);
+  border-radius:11px;
+  color:#fff1bd;
+  background:linear-gradient(145deg,rgba(91,69,35,.96),rgba(20,27,23,.96));
+  box-shadow:inset 0 1px rgba(255,255,255,.16),0 5px 18px rgba(0,0,0,.58),0 0 10px rgba(255,189,77,.12);
+  backdrop-filter:blur(5px);
+  cursor:pointer;
+  touch-action:manipulation;
+}
+.mobile-fullscreen-button svg { width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round; }
+.mobile-fullscreen-button.is-active svg { transform:rotate(180deg) scale(.82); }
+.mobile-fullscreen-button:active { transform:scale(.91); }
+.orientation-guard {
+  display:none;
+  position:fixed;
+  inset:0;
+  z-index:12000;
+  place-items:center;
+  padding:24px;
+  color:#fff1c7;
+  background:radial-gradient(circle at 50% 45%,rgba(35,78,67,.96),rgba(3,9,8,.995) 70%);
+  text-align:center;
+}
+.orientation-card { display:grid;justify-items:center;gap:10px;max-width:360px;padding:25px 28px;border:1px solid rgba(218,178,100,.5);border-radius:16px;background:rgba(11,22,19,.92);box-shadow:0 18px 50px #000,inset 0 1px rgba(255,255,255,.08); }
+.orientation-card strong { font-size:21px;letter-spacing:.08em; }
+.orientation-card small { color:#b9c9c1;font-size:12px;line-height:1.6; }
+.orientation-phone { display:grid;place-items:center;width:43px;height:68px;border:3px solid #e6bf71;border-radius:8px;font-size:0;animation:phoneTurn 1.5s ease-in-out infinite; }
+.orientation-phone::after { content:"";width:5px;height:5px;border-radius:50%;background:#e6bf71;align-self:end;margin-bottom:4px; }
+@keyframes phoneTurn { 0%,25%{transform:rotate(90deg)}65%,100%{transform:rotate(0)} }
+
 @media (max-width:520px){
   .game-screen{padding:6px 5px 24px}
   .hud{grid-template-columns:1.15fr .62fr .82fr auto;gap:5px;padding:7px}
@@ -1432,27 +1471,29 @@ body {
   .corridor-shell{height:calc(var(--tile) * .72)}
 }
 
-/* Phone portrait and landscape: keep the complete fortress centered, top-led and
-   horizontally locked.  The 120%-wide wall still fits because the board uses
-   an 82vw base width on coarse-pointer devices. */
-@media (max-width:600px), (pointer:coarse) and (max-width:960px), (orientation:landscape) and (max-height:520px) and (max-width:960px){
-  :root{--tile:calc(min(82vw,620px) / 6)}
+/* Mobile portrait deliberately zooms the playfield beyond the viewport. The
+   side-wall artwork is cropped while the complete six-column combat area stays
+   centred; every grid coordinate continues to scale from the same --tile. */
+@media (hover:none) and (pointer:coarse) and (orientation:portrait){
+  :root{--tile:calc(min(122vw,680px) / 6)}
   html,body{width:100%;max-width:100%;overflow-x:hidden;overscroll-behavior-x:none}
   .app,.game-screen{width:100%;max-width:100%;margin-inline:auto}
-  .game-screen{padding-top:max(4px,env(safe-area-inset-top));padding-inline:max(4px,env(safe-area-inset-left)) max(4px,env(safe-area-inset-right))}
+  .game-screen{min-height:100dvh;padding-top:max(4px,env(safe-area-inset-top));padding-right:0;padding-left:0;padding-bottom:max(34px,env(safe-area-inset-bottom))}
   .hud{top:0;margin-inline:auto}
-  .battlefield-shell{width:min(82vw,620px);margin-top:calc(var(--tile) * -1.08 + 5px);margin-inline:auto}
+  .battlefield-shell{left:50%;width:min(122vw,680px);margin-top:calc(var(--tile) * -1.08 + 11px);margin-right:0;margin-left:0;transform:translateX(-50%)}
   .wall-hp-wrap{top:63%}
   .repair-button{top:56%;right:8px}
-  .deck{width:min(96vw,744px);margin-top:calc(var(--tile) * -.92);margin-left:50%}
+  .deck{width:min(110vw,760px);margin-top:calc(var(--tile) * -.92);margin-left:50%}
   .corridor,.corridor-slot,.defender{touch-action:none}
+  .mobile-fullscreen-button{display:grid;place-items:center}
+  body.mobile-fullscreen-active .battlefield-shell{margin-top:calc(var(--tile) * -1.08 + clamp(10px,2dvh,18px))}
+  body.mobile-fullscreen-active .deck{margin-top:calc(var(--tile) * -.92 + clamp(12px,2.5dvh,24px))}
 }
 
-@media (orientation:landscape) and (max-height:520px) and (max-width:960px){
-  .game-screen{padding-top:2px}
-  .battlefield-shell{margin-top:calc(var(--tile) * -1.08 + 5px)}
-  .wall-hp-wrap{top:64%}
-  .repair-button{top:57%}
-  .deck{margin-top:calc(var(--tile) * -.86)}
+@media (hover:none) and (pointer:coarse) and (orientation:landscape){
+  html,body{overflow:hidden;overscroll-behavior:none}
+  .orientation-guard{display:grid}
+  .mobile-fullscreen-button{display:none}
 }
+@media (display-mode:standalone){.mobile-fullscreen-button{display:none}}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important}}
