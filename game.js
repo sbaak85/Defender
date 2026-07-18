@@ -21,6 +21,7 @@
   // toward the central vanishing point (about 0.78% per outer endpoint).
   const GRID_COLUMN_SPACING_INTERCEPT = .061696;
   const GRID_COLUMN_SPACING_SLOPE = .043313;
+  const ENEMY_DEPTH_SCALES = [.93, .95, .97, .996, 1.018, 1.04, 1.07, 1.105];
   const WALL_MAX_HP = WALL_CONFIG.maxHp;
   const SPEEDS = GAME_RULES.gameSpeeds;
   const UNIT_UNLOCK_LEVEL = Object.fromEntries(
@@ -150,7 +151,7 @@
   let muted = false;
   let bgmEnabled = true;
   let showEnemyCollision = false;
-  let showBoardGrid = true;
+  let showBoardGrid = false;
   let gameHasStarted = false;
   let bgmErrorShown = false;
   let state = null;
@@ -159,6 +160,8 @@
   let drag = null;
   let selectedCard = null;
   let selectedDefender = null;
+  let selectedEnemyId = null;
+  let selectedWall = false;
   let resultAction = "restart";
   const rangeSurfaceTiles = new Map();
 
@@ -379,6 +382,10 @@
     state = initialState();
     selectedCard = null;
     selectedDefender = null;
+    selectedEnemyId = null;
+    selectedWall = false;
+    els.wall.classList.remove("selected");
+    els.wall.setAttribute("aria-selected", "false");
     els.unitLayer.innerHTML = "";
     els.effectLayer.innerHTML = "";
     els.rangeLayer.innerHTML = "";
@@ -488,6 +495,13 @@
     return aCol < bCol + bSize && aCol + aSize > bCol && aRow < bRow + bSize && aRow + aSize > bRow;
   }
 
+  function isStationaryRangedAttacker(enemy) {
+    if (!enemy || enemy.dead || enemy.remove) return false;
+    const effectiveAttackRange = enemy.resolvedAttackRange ?? enemy.range;
+    if (effectiveAttackRange <= 1) return false;
+    return ROWS - enemyFrontRow(enemy) <= effectiveAttackRange;
+  }
+
   function canEnemyOccupy(enemy, targetRow, targetCol) {
     if (targetCol < 0 || targetRow < 0 || targetCol + enemy.footprint > COLS || targetRow + enemy.footprint > ROWS) return false;
 
@@ -496,6 +510,9 @@
 
     return !state.enemies.some(other => {
       if (other === enemy || other.dead || other.remove) return false;
+      // A ranged enemy that has stopped to attack no longer blocks the lane.
+      // Moving enemies may pass through it and continue toward the wall.
+      if (isStationaryRangedAttacker(other)) return false;
       return footprintsOverlap(targetCol, targetRow, enemy.footprint, other.col, other.row, other.footprint);
     });
   }
@@ -526,6 +543,10 @@
     const config = LEVEL_CONFIGS[state.level];
     const scale = config.scaleStart + scheduledProgress * config.scaleGrowth;
     const footprint = base.footprint || 1;
+    const configuredStopChance = Number(base.stopAtMaxRangeChance);
+    const stopAtMaxRangeChance = Number.isFinite(configuredStopChance)
+      ? Math.max(0, Math.min(1, configuredStopChance))
+      : null;
     const spawnProbe = { footprint };
     if (!canEnemyOccupy(spawnProbe, 0, col)) return false;
     const enemy = {
@@ -535,6 +556,8 @@
       damage: Math.round(base.damage * (1 + scheduledProgress * GAME_RULES.enemyDamageGrowth)),
       defenderDamage: Math.round(base.defenderDamage * (1 + scheduledProgress * GAME_RULES.enemyDamageGrowth)),
       range: base.range || 1,
+      stopAtMaxRangeChance,
+      resolvedAttackRange: null,
       reward: base.reward,
       footprint,
       splashColumns: Math.max(1, base.splashArea?.columns || footprint),
@@ -557,14 +580,34 @@
     const el = document.createElement("div");
     el.className = `game-unit enemy ${enemy.type} footprint-${enemy.footprint}`;
     el.dataset.id = enemy.id;
-    el.innerHTML = `<div class="body"><span class="unit-glyph">${base.glyph}</span><div class="enemy-hpbar" aria-hidden="true"><i></i></div></div>`;
+    el.tabIndex = 0;
+    el.setAttribute("role", "button");
+    el.setAttribute("aria-label", `選取${base.name}`);
+    el.innerHTML = `<div class="enemy-selection-ring" aria-hidden="true"></div><div class="body"><span class="unit-glyph">${base.glyph}</span><div class="enemy-hpbar" aria-hidden="true"><i></i></div></div><div class="unit-name-label" aria-hidden="true">${base.name}</div>`;
     applySprite(el.querySelector(".body"), enemy.type);
+    el.addEventListener("click", e => {
+      if (enemy.dead || enemy.remove) return;
+      e.stopPropagation();
+      selectEnemy(enemy.id);
+    });
+    el.addEventListener("keydown", e => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      e.preventDefault();
+      e.stopPropagation();
+      selectEnemy(enemy.id);
+    });
     return el;
   }
 
   function updateEnemy(enemy, dt) {
     if (enemy.dead) return;
-    if (ROWS - enemyFrontRow(enemy) > enemy.range) {
+    const wallDistance = ROWS - enemyFrontRow(enemy);
+    if (enemy.resolvedAttackRange === null && enemy.stopAtMaxRangeChance !== null && enemy.range > 1 && wallDistance <= enemy.range) {
+      const stopsAtMaxRange = Math.random() < enemy.stopAtMaxRangeChance;
+      enemy.resolvedAttackRange = stopsAtMaxRange ? enemy.range : Math.max(1, enemy.range - 1);
+    }
+    const effectiveAttackRange = enemy.resolvedAttackRange ?? enemy.range;
+    if (wallDistance > effectiveAttackRange) {
       enemy.moveCooldown -= dt;
       if (enemy.moveCooldown <= 0) {
         const nextRow = enemy.row + 1;
@@ -613,9 +656,8 @@
 
   function setEnemyDepthScale(enemy) {
     if (!enemy?.el) return;
-    const centerRow = enemy.row + (enemy.footprint - 1) / 2;
-    const depth = Math.max(0, Math.min(1, centerRow / Math.max(1, ROWS - enemy.footprint)));
-    enemy.el.style.setProperty("--depth-scale", (.78 + depth * .4).toFixed(3));
+    const footRow = Math.max(0, Math.min(ENEMY_DEPTH_SCALES.length - 1, enemyFrontRow(enemy)));
+    enemy.el.style.setProperty("--depth-scale", ENEMY_DEPTH_SCALES[footRow].toFixed(3));
   }
 
   function updateDefender(defender, dt) {
@@ -784,6 +826,8 @@
   function killEnemy(enemy) {
     if (enemy.dead) return;
     enemy.dead = true;
+    if (selectedEnemyId === enemy.id) selectedEnemyId = null;
+    enemy.el.classList.remove("selected");
     state.kills++;
     state.levelKills++;
     const base = ENEMY_TYPES[enemy.type];
@@ -853,6 +897,7 @@
       state.defenders[col] = null;
       if (selectedDefender === col) {
         selectedDefender = null;
+        defender.el.classList.remove("selected");
         els.recycle.disabled = true;
         showRange(null);
       }
@@ -907,18 +952,25 @@
     }
     selectedCard = selectedCard === type ? null : type;
     selectedDefender = null;
+    selectedEnemyId = null;
+    selectedWall = false;
     els.recycle.disabled = true;
     document.querySelectorAll(".unit-card").forEach(card => card.classList.toggle("selected", card.dataset.type === selectedCard));
     document.querySelectorAll(".defender").forEach(el => el.classList.remove("selected"));
+    document.querySelectorAll(".enemy").forEach(el => el.classList.remove("selected"));
+    els.wall.classList.remove("selected");
+    els.wall.setAttribute("aria-selected", "false");
     showRange(type);
     sfx("click");
   }
 
   function onSlotClick(col) {
-    if (!state || state.ended || state.paused) return;
+    if (!state) return;
+    if (state.ended) { clearCharacterSelection(); return; }
     if (state.defenders[col]) { selectDefender(col); return; }
+    if (state.paused) { clearCharacterSelection(); return; }
     if (selectedCard) deploy(selectedCard, col);
-    else if (selectedDefender !== null) selectDefender(selectedDefender);
+    else clearCharacterSelection();
   }
 
   function deploy(type, col) {
@@ -932,9 +984,10 @@
     const el = document.createElement("div");
     el.className = `defender ${type}`;
     el.dataset.col = col;
-    el.innerHTML = `<div class="defender-body"><span>${base.glyph}</span></div><div class="defender-hpbar" aria-hidden="true"><i></i></div>`;
+    el.innerHTML = `<div class="defender-body"><span>${base.glyph}</span></div><div class="defender-hpbar" aria-hidden="true"><i></i></div><div class="unit-name-label" aria-hidden="true">${base.name}</div>`;
     applySprite(el.querySelector(".defender-body"), type, col);
     el.addEventListener("pointerdown", beginDefenderDrag, { passive: false });
+    el.addEventListener("touchstart", beginDefenderTouchDrag, { passive: false });
     el.addEventListener("click", e => {
       if (drag?.moved) return;
       e.stopPropagation();
@@ -946,7 +999,7 @@
     selectedCard = null;
     document.querySelectorAll(".unit-card").forEach(card => card.classList.remove("selected"));
     showRange(null);
-    sfx("deploy");
+    if (!playDefenderDeployAudio(type)) sfx("deploy");
     syncUI(); syncSlots();
   }
 
@@ -979,22 +1032,79 @@
       { duration: 460, easing: "cubic-bezier(.16,1,.3,1)" }
     ));
     selectedDefender = toCol;
+    selectedEnemyId = null;
+    selectedWall = false;
     document.querySelectorAll(".defender").forEach(el => el.classList.toggle("selected", Number(el.dataset.col) === toCol));
+    document.querySelectorAll(".enemy").forEach(el => el.classList.remove("selected"));
+    els.wall.classList.remove("selected");
+    els.wall.setAttribute("aria-selected", "false");
     els.recycle.disabled = false;
     showRange(defender.type);
     toast(other ? `第 ${fromCol + 1}、${toCol + 1} 格守軍已互換` : `守軍已移動到第 ${toCol + 1} 格`);
-    sfx("deploy");
+    if (other) {
+      if (!playDefenderSwapAudio(defender.type)) sfx("deploy");
+    } else {
+      if (!playDefenderMoveAudio(defender.type)) sfx("deploy");
+    }
     syncSlots();
   }
 
   function selectDefender(col) {
     selectedDefender = selectedDefender === col ? null : col;
+    selectedEnemyId = null;
+    selectedWall = false;
     selectedCard = null;
     document.querySelectorAll(".unit-card").forEach(card => card.classList.remove("selected"));
     document.querySelectorAll(".defender").forEach(el => el.classList.toggle("selected", Number(el.dataset.col) === selectedDefender));
+    document.querySelectorAll(".enemy").forEach(el => el.classList.remove("selected"));
+    els.wall.classList.remove("selected");
+    els.wall.setAttribute("aria-selected", "false");
     els.recycle.disabled = selectedDefender === null;
     showRange(selectedDefender === null ? null : state.defenders[selectedDefender]?.type);
     sfx("click");
+  }
+
+  function selectEnemy(enemyId) {
+    const enemy = state?.enemies.find(candidate => candidate.id === enemyId && !candidate.dead && !candidate.remove);
+    if (!enemy) return;
+    selectedEnemyId = selectedEnemyId === enemyId ? null : enemyId;
+    selectedDefender = null;
+    selectedWall = false;
+    selectedCard = null;
+    document.querySelectorAll(".unit-card").forEach(card => card.classList.remove("selected"));
+    document.querySelectorAll(".defender").forEach(el => el.classList.remove("selected"));
+    document.querySelectorAll(".enemy").forEach(el => el.classList.toggle("selected", Number(el.dataset.id) === selectedEnemyId));
+    els.wall.classList.remove("selected");
+    els.wall.setAttribute("aria-selected", "false");
+    els.recycle.disabled = true;
+    showRange(null);
+    sfx("click");
+  }
+
+  function selectWall() {
+    if (!state) return;
+    selectedWall = !selectedWall;
+    selectedDefender = null;
+    selectedEnemyId = null;
+    selectedCard = null;
+    document.querySelectorAll(".unit-card,.defender,.enemy").forEach(el => el.classList.remove("selected"));
+    els.wall.classList.toggle("selected", selectedWall);
+    els.wall.setAttribute("aria-selected", String(selectedWall));
+    els.recycle.disabled = true;
+    showRange(null);
+    sfx("click");
+  }
+
+  function clearCharacterSelection() {
+    if (selectedDefender === null && selectedEnemyId === null && !selectedWall) return;
+    selectedDefender = null;
+    selectedEnemyId = null;
+    selectedWall = false;
+    document.querySelectorAll(".defender.selected,.enemy.selected").forEach(el => el.classList.remove("selected"));
+    els.wall.classList.remove("selected");
+    els.wall.setAttribute("aria-selected", "false");
+    els.recycle.disabled = true;
+    showRange(null);
   }
 
   function recycleSelected() {
@@ -1007,6 +1117,7 @@
     defender.el.animate([{ opacity:1, transform:"scale(1)" },{ opacity:0, transform:"scale(.2) translateY(30px)" }],{duration:380,easing:"ease-in",fill:"forwards"});
     setTimeout(() => defender.el.remove(), 390);
     state.defenders[selectedDefender] = null;
+    defender.el.classList.remove("selected");
     selectedDefender = null;
     els.recycle.disabled = true;
     toast(`回收成功 ◆ +${refund}`);
@@ -1036,6 +1147,7 @@
   }
 
   function beginDefenderDrag(e) {
+    if (e.pointerType === "touch") return;
     if (!state || state.ended || state.paused || e.button > 0) return;
     e.stopPropagation();
     const fromCol = Number(e.currentTarget.dataset.col);
@@ -1048,6 +1160,70 @@
     window.addEventListener("pointermove", onMove, { passive: false });
     window.addEventListener("pointerup", onUp, { once: true });
     window.addEventListener("pointercancel", onUp, { once: true });
+  }
+
+  function touchById(touchList, id) {
+    return [...(touchList || [])].find(touch => touch.identifier === id) || null;
+  }
+
+  function beginDefenderTouchDrag(e) {
+    if (!state || state.ended || state.paused || e.touches.length !== 1) return;
+    const touch = e.changedTouches[0] || e.touches[0];
+    if (!touch) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const fromCol = Number(e.currentTarget.dataset.col);
+    const defender = state.defenders[fromCol];
+    if (!defender) return;
+    const touchId = touch.identifier;
+    drag = {
+      type: defender.type,
+      fromCol,
+      moveExisting: true,
+      input: "touch",
+      id: touchId,
+      x: touch.clientX,
+      y: touch.clientY,
+      lastX: touch.clientX,
+      lastY: touch.clientY,
+      moved: false,
+      source: e.currentTarget,
+      ghost: null,
+      previewCol: null
+    };
+
+    const onTouchMove = ev => {
+      const activeTouch = touchById(ev.touches, touchId) || touchById(ev.changedTouches, touchId);
+      if (!activeTouch || !drag || drag.input !== "touch" || drag.id !== touchId) return;
+      ev.preventDefault();
+      moveDrag({
+        pointerId: touchId,
+        clientX: activeTouch.clientX,
+        clientY: activeTouch.clientY,
+        cancelable: false,
+        preventDefault() {}
+      });
+    };
+    const finishTouch = ev => {
+      const endedTouch = touchById(ev.changedTouches, touchId);
+      if (!endedTouch && ev.type !== "touchcancel") return;
+      ev.preventDefault();
+      window.removeEventListener("touchmove", onTouchMove);
+      window.removeEventListener("touchend", finishTouch);
+      window.removeEventListener("touchcancel", finishTouch);
+      if (!drag || drag.input !== "touch" || drag.id !== touchId) return;
+      const wasMoved = drag.moved;
+      const canceled = ev.type === "touchcancel";
+      const clientX = endedTouch?.clientX ?? drag.lastX;
+      const clientY = endedTouch?.clientY ?? drag.lastY;
+      finishDragAt(clientX, clientY, !canceled);
+      if (!canceled && !wasMoved && state.defenders[fromCol]) selectDefender(fromCol);
+    };
+
+    window.addEventListener("touchmove", onTouchMove, { passive: false });
+    window.addEventListener("touchend", finishTouch, { passive: false });
+    window.addEventListener("touchcancel", finishTouch, { passive: false });
   }
 
   function beginDrag(e, type) {
@@ -1112,6 +1288,8 @@
   function moveDrag(e) {
     if (!drag || e.pointerId !== drag.id) return;
     if (e.cancelable) e.preventDefault();
+    drag.lastX = e.clientX;
+    drag.lastY = e.clientY;
     const distance = Math.hypot(e.clientX - drag.x, e.clientY - drag.y);
     if (distance < 7 && !drag.moved) return;
     if (!drag.ghost) {
@@ -1143,10 +1321,14 @@
     window.removeEventListener("pointermove", onMove);
     window.removeEventListener("pointerup", onUp);
     window.removeEventListener("pointercancel", onUp);
+    finishDragAt(e.clientX, e.clientY, e.type !== "pointercancel");
+  }
+
+  function finishDragAt(clientX, clientY, allowDrop = true) {
     if (!drag) return;
     const wasMoved = drag.moved;
-    if (wasMoved) {
-      const target = corridorDropTargetAt(e.clientX, e.clientY);
+    if (wasMoved && allowDrop) {
+      const target = corridorDropTargetAt(clientX, clientY);
       if (target) {
         const toCol = Number(target.dataset.col);
         if (canDropDraggedUnit(toCol)) {
@@ -1295,6 +1477,10 @@
     state.ended = false;
     selectedCard = null;
     selectedDefender = null;
+    selectedEnemyId = null;
+    selectedWall = false;
+    els.wall.classList.remove("selected");
+    els.wall.setAttribute("aria-selected", "false");
     showRange(null);
     syncUI();
     await playCountdown(["第二關", "3", "2", "1", "繼續防守!"]);
@@ -1370,7 +1556,10 @@
       ...(config?.cast?.files || []),
       ...(config?.attack || []),
       ...(config?.impact || []),
-      ...(config?.death || [])
+      ...(config?.death || []),
+      ...(config?.deploy || []),
+      ...(config?.move || []),
+      ...(config?.swap || [])
     ]);
     new Set(samples.map(sample => sample.path)).forEach(path => ensureAttackAudioPool(path));
   }
@@ -1405,24 +1594,34 @@
     return true;
   }
 
+  function playConfiguredAudioChannel(config, channel, fallbackMode = "random") {
+    if (!config) return false;
+    const samples = channel === "cast" ? config.cast?.files : config[channel];
+    if (!samples?.length) return false;
+    const configuredMode = channel === "cast" ? config.cast?.mode : config[`${channel}Mode`];
+    const mode = configuredMode === "all" || configuredMode === "random" ? configuredMode : fallbackMode;
+    if (mode === "all") {
+      samples.forEach(playAttackSample);
+      return true;
+    }
+    return playRandomAudioSample(samples);
+  }
+
   function playUnitAttackAudio(type) {
     const config = UNIT_AUDIO_CONFIGS[type];
     if (!config) return false;
-    const played = playRandomAudioSample(config.attack);
+    const played = playConfiguredAudioChannel(config, "attack", "random");
     const cast = config.cast;
-    if (cast?.files?.length && Math.random() < (cast.chance || 0)) playRandomAudioSample(cast.files);
+    if (cast?.files?.length && Math.random() < (cast.chance || 0)) playConfiguredAudioChannel(config, "cast", "random");
     return played;
   }
 
   function playUnitImpactAudio(type) {
-    const samples = UNIT_AUDIO_CONFIGS[type]?.impact;
-    if (!samples?.length) return false;
-    samples.forEach(playAttackSample);
-    return true;
+    return playConfiguredAudioChannel(UNIT_AUDIO_CONFIGS[type], "impact", "all");
   }
 
   function playUnitDeathAudio(type) {
-    return playRandomAudioSample(UNIT_AUDIO_CONFIGS[type]?.death);
+    return playConfiguredAudioChannel(UNIT_AUDIO_CONFIGS[type], "death", "random");
   }
 
   function playDefenderFireAudio(type) {
@@ -1431,6 +1630,18 @@
 
   function playDefenderHitAudio(type) {
     return playUnitImpactAudio(type);
+  }
+
+  function playDefenderDeployAudio(type) {
+    return playConfiguredAudioChannel(UNIT_AUDIO_CONFIGS[type], "deploy", "random");
+  }
+
+  function playDefenderMoveAudio(type) {
+    return playConfiguredAudioChannel(UNIT_AUDIO_CONFIGS[type], "move", "random");
+  }
+
+  function playDefenderSwapAudio(type) {
+    return playConfiguredAudioChannel(UNIT_AUDIO_CONFIGS[type], "swap", "random");
   }
 
   function showBgmError() {
@@ -1656,8 +1867,24 @@
   els.gridToggle.addEventListener("click", toggleBoardGrid);
   els.unlockAllUnits.addEventListener("click", toggleAllUnitsDebug);
   els.debugCoins.addEventListener("click", setDebugCoins);
+  els.wall.addEventListener("click", e => {
+    if (e.target instanceof Element && e.target.closest("button")) return;
+    e.stopPropagation();
+    selectWall();
+  });
+  els.wall.addEventListener("keydown", e => {
+    if (e.target !== els.wall || (e.key !== "Enter" && e.key !== " ")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    selectWall();
+  });
   els.bgm.addEventListener("error", () => { if (gameHasStarted && bgmEnabled && !muted) showBgmError(); });
-  document.addEventListener("click", () => setDebugMenu(false));
+  document.addEventListener("click", e => {
+    setDebugMenu(false);
+    if (!(e.target instanceof Element)) return;
+    if (e.target.closest("button,.unit-card,.defender,.enemy,.debug-menu")) return;
+    clearCharacterSelection();
+  });
   window.addEventListener("keydown", e => {
     if (e.code === "Space") { e.preventDefault(); togglePause(); }
     if (e.code === "Escape") setDebugMenu(false);

@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#08130f" />
   <title>EMBERWATCH — 地城守望</title>
   <meta name="description" content="6×8 縱向俯視棋盤格塔防遊戲" />
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=20260718-scene-drop-5px-v10" />
 </head>
 <body>
   <main id="app" class="app game-blur-target">
@@ -41,7 +41,7 @@
               </div>
               <div class="debug-option">
                 <span class="debug-menu-label">棋盤格框線</span>
-                <button id="gridToggleButton" class="bgm-toggle grid-toggle is-on" type="button" aria-pressed="true">Grid ON</button>
+                <button id="gridToggleButton" class="bgm-toggle grid-toggle is-off" type="button" aria-pressed="false">Grid OFF</button>
               </div>
               <div class="debug-option">
                 <span class="debug-menu-label">守軍單位</span>
@@ -61,13 +61,13 @@
           <span class="torch left"></span><span class="rune">✦</span><span class="torch right"></span>
         </div>
         <div id="board" class="board" aria-label="6乘8戰場棋盤">
-          <div id="tileLayer" class="tile-layer"></div>
+          <div id="tileLayer" class="tile-layer hide-grid-lines"></div>
           <div id="rangeLayer" class="range-layer"></div>
           <div id="unitLayer" class="unit-layer"></div>
           <div id="effectLayer" class="effect-layer"></div>
         </div>
 
-        <section id="wall" class="fortress-wall" aria-label="城牆">
+        <section id="wall" class="fortress-wall" aria-label="城牆（可選取）" aria-selected="false" tabindex="0">
           <div class="wall-battlement" aria-hidden="true"></div>
           <div class="wall-hp-wrap">
             <span>城牆</span>
@@ -133,7 +133,7 @@
     </div>
   </section>
 
-  <script src="game-config.js"></script>
-  <script src="game.js"></script>
+  <script src="game-config.js?v=20260718-player-place-volume-v12"></script>
+  <script src="game.js?v=20260718-audio-play-mode-v14"></script>
 </body>
 </html>

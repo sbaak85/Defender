@@ -201,7 +201,25 @@ window.DEFENDER_CONFIG = {
               "volume": 0.2
             }
           ],
-          "death": []
+          "death": [],
+          "deploy": [
+            {
+              "path": "assets/audio/\u97F3\u6548/PutIn.mp3",
+              "volume": 0.9
+            }
+          ],
+          "move": [
+            {
+              "path": "assets/audio/\u97F3\u6548/PutIn.mp3",
+              "volume": 0.9
+            }
+          ],
+          "swap": [
+            {
+              "path": "assets/audio/\u97F3\u6548/Change.mp3",
+              "volume": 1
+            }
+          ]
         }
       },
       "archer": {
@@ -257,7 +275,25 @@ window.DEFENDER_CONFIG = {
               "volume": 0.3
             }
           ],
-          "death": []
+          "death": [],
+          "deploy": [
+            {
+              "path": "assets/audio/\u97F3\u6548/PutIn.mp3",
+              "volume": 0.9
+            }
+          ],
+          "move": [
+            {
+              "path": "assets/audio/\u97F3\u6548/PutIn.mp3",
+              "volume": 0.9
+            }
+          ],
+          "swap": [
+            {
+              "path": "assets/audio/\u97F3\u6548/Change.mp3",
+              "volume": 1
+            }
+          ]
         }
       },
       "warrior": {
@@ -321,7 +357,25 @@ window.DEFENDER_CONFIG = {
               "volume": 0.5
             }
           ],
-          "death": []
+          "death": [],
+          "deploy": [
+            {
+              "path": "assets/audio/\u97F3\u6548/PutIn.mp3",
+              "volume": 0.9
+            }
+          ],
+          "move": [
+            {
+              "path": "assets/audio/\u97F3\u6548/PutIn.mp3",
+              "volume": 0.9
+            }
+          ],
+          "swap": [
+            {
+              "path": "assets/audio/\u97F3\u6548/Change.mp3",
+              "volume": 1
+            }
+          ]
         }
       },
       "ballista": {
@@ -358,7 +412,25 @@ window.DEFENDER_CONFIG = {
           },
           "attack": [],
           "impact": [],
-          "death": []
+          "death": [],
+          "deploy": [
+            {
+              "path": "assets/audio/\u97F3\u6548/PutIn.mp3",
+              "volume": 0.9
+            }
+          ],
+          "move": [
+            {
+              "path": "assets/audio/\u97F3\u6548/PutIn.mp3",
+              "volume": 0.9
+            }
+          ],
+          "swap": [
+            {
+              "path": "assets/audio/\u97F3\u6548/Change.mp3",
+              "volume": 1
+            }
+          ]
         }
       },
       "cannon": {
@@ -395,7 +467,25 @@ window.DEFENDER_CONFIG = {
           },
           "attack": [],
           "impact": [],
-          "death": []
+          "death": [],
+          "deploy": [
+            {
+              "path": "assets/audio/\u97F3\u6548/PutIn.mp3",
+              "volume": 0.9
+            }
+          ],
+          "move": [
+            {
+              "path": "assets/audio/\u97F3\u6548/PutIn.mp3",
+              "volume": 0.9
+            }
+          ],
+          "swap": [
+            {
+              "path": "assets/audio/\u97F3\u6548/Change.mp3",
+              "volume": 1
+            }
+          ]
         }
       }
     },
@@ -441,8 +531,9 @@ window.DEFENDER_CONFIG = {
         "displayName": "\u5DE8\u9B54",
         "faction": "enemy",
         "glyph": "\uD83D\uDC79",
-        "attackDamage": 4,
-        "attackRange": 1,
+        "attackDamage": 7,
+        "attackRange": 2,
+        "stopAtMaxRangeChance": 0.5,
         "maxHp": 50,
         "resourceCost": 0,
         "killReward": 2,
@@ -454,7 +545,7 @@ window.DEFENDER_CONFIG = {
         "repairCost": 0,
         "repairAmount": 0,
         "attackInterval": 4,
-        "splashDamage": 3,
+        "splashDamage": 6,
         "splashArea": {
           "columns": 1,
           "rows": 1
@@ -467,19 +558,23 @@ window.DEFENDER_CONFIG = {
         "audio": {
           "cast": {
             "chance": 0,
-            "files": []
+            "files": [],
+            "mode": "random"
           },
           "attack": [],
           "impact": [],
-          "death": []
+          "death": [],
+          "attackMode": "random",
+          "impactMode": "all",
+          "deathMode": "random"
         }
       },
       "beholder": {
         "displayName": "\u773C\u9B54",
         "faction": "enemy",
         "glyph": "\uD83D\uDC41\uFE0F",
-        "attackDamage": 6,
-        "attackRange": 1,
+        "attackDamage": 9,
+        "attackRange": 2,
         "maxHp": 70,
         "resourceCost": 0,
         "killReward": 3,
@@ -491,7 +586,7 @@ window.DEFENDER_CONFIG = {
         "repairCost": 0,
         "repairAmount": 0,
         "attackInterval": 4,
-        "splashDamage": 5,
+        "splashDamage": 7,
         "splashArea": {
           "columns": 2,
           "rows": 1
@@ -504,18 +599,23 @@ window.DEFENDER_CONFIG = {
         "audio": {
           "cast": {
             "chance": 0,
-            "files": []
+            "files": [],
+            "mode": "random"
           },
           "attack": [],
           "impact": [],
-          "death": []
-        }
+          "death": [],
+          "attackMode": "random",
+          "impactMode": "all",
+          "deathMode": "random"
+        },
+        "stopAtMaxRangeChance": 0.20
       },
       "wolf": {
         "displayName": "\u72FC",
         "faction": "enemy",
         "glyph": "\uD83D\uDC3A",
-        "attackDamage": 5,
+        "attackDamage": 4,
         "attackRange": 1,
         "maxHp": 60,
         "resourceCost": 0,
@@ -541,19 +641,24 @@ window.DEFENDER_CONFIG = {
         "audio": {
           "cast": {
             "chance": 0,
-            "files": []
+            "files": [],
+            "mode": "random"
           },
           "attack": [],
           "impact": [],
-          "death": []
-        }
+          "death": [],
+          "attackMode": "random",
+          "impactMode": "all",
+          "deathMode": "random"
+        },
+        "stopAtMaxRangeChance": 0
       },
       "octopus": {
         "displayName": "\u7AE0\u9B5A\u602A",
         "faction": "enemy",
         "glyph": "\uD83D\uDC19",
-        "attackDamage": 10,
-        "attackRange": 1,
+        "attackDamage": 15,
+        "attackRange": 3,
         "maxHp": 120,
         "resourceCost": 0,
         "killReward": 8,
@@ -565,7 +670,7 @@ window.DEFENDER_CONFIG = {
         "repairCost": 0,
         "repairAmount": 0,
         "attackInterval": 5,
-        "splashDamage": 8,
+        "splashDamage": 13,
         "splashArea": {
           "columns": 2,
           "rows": 1
@@ -578,12 +683,17 @@ window.DEFENDER_CONFIG = {
         "audio": {
           "cast": {
             "chance": 0,
-            "files": []
+            "files": [],
+            "mode": "random"
           },
           "attack": [],
           "impact": [],
-          "death": []
-        }
+          "death": [],
+          "attackMode": "random",
+          "impactMode": "all",
+          "deathMode": "random"
+        },
+        "stopAtMaxRangeChance": 0.50
       }
     }
   }

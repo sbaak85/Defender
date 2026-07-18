@@ -523,6 +523,7 @@ internal sealed class MainForm : Form
             AddSection("戰鬥與經濟");
             AddNumber("attackDamage", "攻擊傷害");
             AddNumber("attackRange", "攻擊距離（格）");
+            if (unit.Group == "enemy") AddProbability("stopAtMaxRangeChance", "最大射程停下機率 (0~1)");
             AddNumber("attackInterval", "攻擊速度（秒/次）", 2, 0.05M);
             AddNumber("maxHp", "生命血量");
             AddNumber("resourceCost", "花費資源");
@@ -543,12 +544,18 @@ internal sealed class MainForm : Form
             AddText("targetMode", "索敵方式");
             AddBoolean("canOverlapAtWall", "城牆前允許重疊");
 
-            AddSection("音效（每行格式：路徑 | Volume）");
+            AddSection("音效（路徑 | Volume；逗號＝隨機抽1；加號＝同時播放）");
             AddAudioChance();
             AddAudioList("audio.cast.files", "單位出招音檔", "cast");
             AddAudioList("audio.attack", "單位攻擊音檔", "attack");
             AddAudioList("audio.impact", "命中目標音檔", "impact");
             AddAudioList("audio.death", "單位陣亡音檔", "death");
+            if (unit.Group == "player")
+            {
+                AddAudioList("audio.deploy", "部署成功音檔", "deploy");
+                AddAudioList("audio.move", "移動至空格成功音檔", "move");
+                AddAudioList("audio.swap", "換位成功音檔", "swap");
+            }
 
             var saveButton = new Button
             {
@@ -602,6 +609,14 @@ internal sealed class MainForm : Form
             AddRow(label, control, 34);
         }
 
+        private void AddProbability(string key, string label)
+        {
+            var control = CreateNumber(working[key]?.GetValue<decimal>() ?? 0, 2, 0.05M);
+            control.Maximum = 1;
+            fields[key] = control;
+            AddRow(label, control, 34);
+        }
+
         private void AddNestedNumber(string fieldKey, string label, string objectKey, string valueKey)
         {
             var nested = working[objectKey]!.AsObject();
@@ -637,14 +652,17 @@ internal sealed class MainForm : Form
             var audio = working["audio"]!.AsObject();
             JsonArray list;
             if (channel == "cast") list = audio["cast"]!["files"]!.AsArray();
-            else list = audio[channel]!.AsArray();
+            else list = audio[channel]?.AsArray() ?? new JsonArray();
             var lines = list.Select(item =>
             {
                 var sample = item!.AsObject();
                 var path = sample["path"]?.GetValue<string>() ?? "";
                 var volume = sample["volume"]?.GetValue<decimal>() ?? 1;
                 return $"{path} | {volume.ToString("0.##", CultureInfo.InvariantCulture)}";
-            });
+            }).ToList();
+            var mode = GetAudioMode(audio, channel);
+            var separator = mode == "all" ? " +" : " ,";
+            for (var index = 0; index < lines.Count - 1; index++) lines[index] += separator;
             var control = new TextBox
             {
                 Text = string.Join(Environment.NewLine, lines),
@@ -654,7 +672,16 @@ internal sealed class MainForm : Form
                 Dock = DockStyle.Fill
             };
             fields[fieldKey] = control;
-            AddRow(label, control, 86);
+            AddRow($"{label}（{(mode == "all" ? "同時播放 +" : "隨機抽1 ,")}）", control, 86);
+        }
+
+        private static string GetAudioMode(JsonObject audio, string channel)
+        {
+            var configured = channel == "cast"
+                ? audio["cast"]?["mode"]?.GetValue<string>()
+                : audio[$"{channel}Mode"]?.GetValue<string>();
+            if (configured is "all" or "random") return configured;
+            return channel == "impact" ? "all" : "random";
         }
 
         private static NumericUpDown CreateNumber(decimal value, int decimals, decimal increment)
@@ -704,6 +731,8 @@ internal sealed class MainForm : Form
                 working["glyph"] = ((TextBox)fields["glyph"]).Text;
                 foreach (var key in new[] { "attackDamage", "attackRange", "attackInterval", "maxHp", "resourceCost", "killReward", "moveInterval", "repairCost", "repairAmount", "splashDamage", "unlockLevel", "scoreValue" })
                     working[key] = ((NumericUpDown)fields[key]).Value;
+                if (fields.TryGetValue("stopAtMaxRangeChance", out var stopChanceControl))
+                    working["stopAtMaxRangeChance"] = ((NumericUpDown)stopChanceControl).Value;
 
                 var footprint = working["footprint"]!.AsObject();
                 footprint["columns"] = ((NumericUpDown)fields["footprint.columns"]).Value;
@@ -718,10 +747,16 @@ internal sealed class MainForm : Form
                 var audio = working["audio"]!.AsObject();
                 var cast = audio["cast"]!.AsObject();
                 cast["chance"] = ((NumericUpDown)fields["audio.cast.chance"]).Value;
-                cast["files"] = ParseAudioList(((TextBox)fields["audio.cast.files"]).Lines);
-                audio["attack"] = ParseAudioList(((TextBox)fields["audio.attack"]).Lines);
-                audio["impact"] = ParseAudioList(((TextBox)fields["audio.impact"]).Lines);
-                audio["death"] = ParseAudioList(((TextBox)fields["audio.death"]).Lines);
+                SaveAudioList(audio, "cast", "audio.cast.files");
+                SaveAudioList(audio, "attack", "audio.attack");
+                SaveAudioList(audio, "impact", "audio.impact");
+                SaveAudioList(audio, "death", "audio.death");
+                if (fields.TryGetValue("audio.deploy", out var deployAudioControl))
+                    SaveAudioList(audio, "deploy", "audio.deploy");
+                if (fields.TryGetValue("audio.move", out var moveAudioControl))
+                    SaveAudioList(audio, "move", "audio.move");
+                if (fields.TryGetValue("audio.swap", out var swapAudioControl))
+                    SaveAudioList(audio, "swap", "audio.swap");
 
                 UpdatedUnit = working;
                 DialogResult = DialogResult.OK;
@@ -733,13 +768,44 @@ internal sealed class MainForm : Form
             }
         }
 
-        private static JsonArray ParseAudioList(IEnumerable<string> lines)
+        private void SaveAudioList(JsonObject audio, string channel, string fieldKey)
+        {
+            var fallbackMode = GetAudioMode(audio, channel);
+            var parsed = ParseAudioList(((TextBox)fields[fieldKey]).Lines, fallbackMode);
+            if (channel == "cast")
+            {
+                var cast = audio["cast"]!.AsObject();
+                cast["files"] = parsed.Files;
+                cast["mode"] = parsed.Mode;
+            }
+            else
+            {
+                audio[channel] = parsed.Files;
+                audio[$"{channel}Mode"] = parsed.Mode;
+            }
+        }
+
+        private static (JsonArray Files, string Mode) ParseAudioList(IEnumerable<string> lines, string fallbackMode)
         {
             var result = new JsonArray();
-            foreach (var raw in lines)
+            var entries = lines.Select(raw => raw.Trim()).Where(line => line.Length > 0).ToList();
+            string? detectedMode = null;
+            for (var index = 0; index < entries.Count; index++)
             {
-                var line = raw.Trim();
-                if (line.Length == 0) continue;
+                var line = entries[index];
+                var marker = line[^1];
+                if (marker is ',' or '+')
+                {
+                    var lineMode = marker == '+' ? "all" : "random";
+                    if (detectedMode is not null && detectedMode != lineMode)
+                        throw new FormatException("同一音效事件不能混用逗號與加號。請統一使用 ,（隨機抽1）或 +（同時播放）。");
+                    detectedMode = lineMode;
+                    line = line[..^1].TrimEnd();
+                }
+                else if (index < entries.Count - 1)
+                {
+                    throw new FormatException($"音效之間缺少播放符號：{line}\n請在行尾加入 ,（隨機抽1）或 +（同時播放）。");
+                }
                 var splitAt = line.LastIndexOf('|');
                 if (splitAt <= 0) throw new FormatException($"音效格式錯誤：{line}\n正確格式為：音檔路徑 | Volume");
                 var path = line[..splitAt].Trim();
@@ -748,7 +814,7 @@ internal sealed class MainForm : Form
                     throw new FormatException($"Volume 必須介於 0～1：{line}");
                 result.Add(new JsonObject { ["path"] = path, ["volume"] = volume });
             }
-            return result;
+            return (result, detectedMode ?? fallbackMode);
         }
     }
 

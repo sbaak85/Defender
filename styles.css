@@ -88,7 +88,7 @@ button { font: inherit; }
 }
 .bgm-toggle.is-off { color: #c4cbc8; border-color: rgba(190,205,198,.22); background: linear-gradient(#3a4541, #1b2320); box-shadow: inset 0 1px rgba(255,255,255,.06); }
 
-.battlefield-shell { position: relative; width: min(94vw, 620px); margin: 8px auto 0; filter: drop-shadow(0 26px 42px rgba(0,0,0,.5)); }
+.battlefield-shell { position: relative; width: min(94vw, 620px); margin:calc(var(--tile) * -1.08 + 5px) auto 0; filter: drop-shadow(0 26px 42px rgba(0,0,0,.5)); }
 .dungeon-crown {
   position: absolute; z-index: 5; top: -29px; left: -8px; right: -8px; height: 36px; display: flex; align-items: center; justify-content: center;
   border: 2px solid #3a4c46; border-radius: 14px 14px 3px 3px; background: linear-gradient(#182620,#080e0c); box-shadow: inset 0 2px rgba(255,255,255,.06);
@@ -177,7 +177,7 @@ button { font: inherit; }
 .unit-layer.show-collision .game-unit.footprint-2::after { content:"2×2"; }
 .unit-layer.show-collision .game-unit.dead::before,
 .unit-layer.show-collision .game-unit.dead::after { opacity:.25; }
-.game-unit.enemy { z-index:calc(30 + var(--row)); }
+.game-unit.enemy { z-index:calc(30 + var(--row)); cursor:pointer; user-select:none; -webkit-user-select:none; touch-action:manipulation; }
 .game-unit .body {
   position:relative; width:76%; aspect-ratio:1; display:grid; place-items:center; border-radius:44% 52% 46% 48%;
   font-size:clamp(22px,7vw,43px); line-height:1; transform:translate(var(--stack-x,0),var(--stack-y,0));
@@ -223,6 +223,71 @@ button { font: inherit; }
 .game-unit.enemy .body.has-sprite {
   transform:translate(var(--stack-x,0),calc(var(--stack-y,0%) + var(--enemy-lift,0%))) scale(var(--depth-scale,1));
   transform-origin:center bottom;
+  pointer-events:auto;
+  cursor:pointer;
+}
+.enemy-selection-ring {
+  position:absolute;
+  left:50%;
+  bottom:3%;
+  z-index:0;
+  width:82%;
+  aspect-ratio:1;
+  pointer-events:none;
+  opacity:0;
+  border:2px solid rgba(255,193,102,.88);
+  border-radius:50%;
+  transform:translateX(-50%) scaleY(.34);
+  transform-origin:center;
+  background:
+    radial-gradient(circle,rgba(255,177,78,.2) 0 34%,rgba(255,214,134,.13) 35% 52%,transparent 54%),
+    repeating-conic-gradient(from 10deg,rgba(255,224,159,.54) 0 5deg,transparent 6deg 29deg);
+  box-shadow:inset 0 0 12px rgba(255,153,48,.35),0 0 8px rgba(255,194,97,.68),0 0 17px rgba(255,120,42,.32);
+  transition:opacity .14s ease,filter .14s ease;
+}
+.game-unit.footprint-2 .enemy-selection-ring { width:72%; bottom:5%; }
+.game-unit.enemy.selected .enemy-selection-ring {
+  opacity:.84;
+  animation:enemySelectAura 1.35s ease-in-out infinite;
+}
+.unit-name-label {
+  position:absolute;
+  left:50%;
+  z-index:120;
+  min-width:max-content;
+  padding:2px 7px 3px;
+  pointer-events:none;
+  opacity:0;
+  visibility:hidden;
+  color:#fff4d5;
+  font-size:clamp(9px,1.45vw,13px);
+  font-weight:900;
+  line-height:1;
+  letter-spacing:.08em;
+  white-space:nowrap;
+  text-align:center;
+  text-shadow:0 1px 2px #000,0 0 4px #000;
+  border:1px solid rgba(255,204,116,.62);
+  border-radius:4px;
+  background:linear-gradient(180deg,rgba(35,30,22,.9),rgba(10,13,12,.88));
+  box-shadow:inset 0 1px rgba(255,255,255,.12),0 2px 6px rgba(0,0,0,.7);
+  transform:translate(-50%,5px);
+  transition:opacity .14s ease,transform .14s ease,visibility 0s linear .14s;
+}
+.game-unit.enemy .unit-name-label { bottom:1%; }
+.game-unit.enemy.footprint-2 .unit-name-label { bottom:3%; }
+.defender .unit-name-label {
+  bottom:-5%;
+  color:#dfffee;
+  border-color:rgba(112,255,202,.66);
+  background:linear-gradient(180deg,rgba(19,48,39,.92),rgba(7,18,15,.9));
+}
+.game-unit.enemy.selected .unit-name-label,
+.defender.selected .unit-name-label {
+  opacity:1;
+  visibility:visible;
+  transform:translate(-50%,0);
+  transition:opacity .12s ease,transform .12s ease,visibility 0s;
 }
 .game-unit .body.has-sprite::after,.defender .defender-body.has-sprite::after { display:none; }
 .game-unit.dead { opacity:0; filter:grayscale(1) brightness(.4); transform:translateY(16px) scale(.72) rotate(-8deg); }
@@ -255,7 +320,7 @@ button { font: inherit; }
 .corridor-slot.locked::after { content:"🔒"; z-index:2; font-size:clamp(14px,4vw,22px); opacity:.45; }
 .corridor-slot.hover,.corridor-slot.selected { background:rgba(66,255,171,.14); box-shadow:inset 0 0 22px rgba(53,255,172,.24); }
 .corridor-slot.hover::before { border-style:solid; transform:scale(1.08); box-shadow:0 0 15px var(--emerald); }
-.defender { position:relative; z-index:3; width:92%; display:flex; flex-direction:column; align-items:center; cursor:pointer; user-select:none; -webkit-user-select:none; -webkit-user-drag:none; touch-action:none; animation:deployIn .42s cubic-bezier(.15,1.15,.28,1); }
+.defender { position:relative; z-index:3; width:92%; display:flex; flex-direction:column; align-items:center; cursor:pointer; user-select:none; -webkit-user-select:none; -webkit-user-drag:none; -webkit-touch-callout:none; touch-action:none; overscroll-behavior:contain; animation:deployIn .42s cubic-bezier(.15,1.15,.28,1); }
 .defender { top:calc(var(--tile) * -.56); }
 .defender.warrior { top:calc(var(--tile) * -.67); }
 .defender.archer { top:calc(var(--tile) * -.51); }
@@ -826,6 +891,12 @@ body {
   visibility:visible;
   transition:opacity .12s ease,visibility 0s;
 }
+.enemy.selected .enemy-hpbar,
+.defender.selected .defender-hpbar {
+  opacity:1;
+  visibility:visible;
+  transition:opacity .12s ease,visibility 0s;
+}
 .defender-hpbar i {
   position:relative;
   display:block;
@@ -862,6 +933,7 @@ body {
   transform-origin:center 72%;
   isolation:isolate;
   overflow:visible;
+  cursor:pointer;
 }
 .fortress-wall::before {
   content:"";
@@ -874,7 +946,12 @@ body {
   pointer-events:none;
   background:transparent url("assets/generated/dungeon-player-wall-6slot-v2.png") center / 100% 100% no-repeat;
   filter:drop-shadow(0 12px 15px rgba(0,0,0,.55));
+  transition:filter .18s ease,opacity .18s ease;
 }
+.fortress-wall.selected::before {
+  filter:brightness(1.18) saturate(1.06) drop-shadow(0 12px 15px rgba(0,0,0,.55)) drop-shadow(0 0 10px rgba(255,211,125,.32));
+}
+.fortress-wall:focus-visible { outline:2px solid rgba(255,214,134,.72); outline-offset:-5px; }
 .fortress-wall::after {
   content:"";
   position:absolute;
@@ -1321,6 +1398,7 @@ body {
 @keyframes unitIdle{to{transform:translate(var(--stack-x,0),calc(var(--stack-y,0%) + var(--enemy-lift,0%) - 4px)) scale(var(--depth-scale,1)) rotate(-1deg)}}
 @keyframes defenderIdle{to{transform:translateY(-4px) rotate(.8deg)}}
 @keyframes defenderSelectAura{0%,100%{opacity:.7;filter:brightness(.92)}50%{opacity:1;filter:brightness(1.34)}}
+@keyframes enemySelectAura{0%,100%{opacity:.68;filter:brightness(.92)}50%{opacity:.94;filter:brightness(1.28)}}
 @keyframes hitFlash{0%,100%{filter:none}35%{filter:brightness(4) saturate(0)}70%{filter:brightness(1.35)}}
 @keyframes attackPop{40%{transform:translate(var(--stack-x,0),calc(var(--stack-y,0%) + var(--enemy-lift,0%) + 8px)) scale(calc(var(--depth-scale,1) * 1.12))}100%{transform:translate(var(--stack-x,0),calc(var(--stack-y,0%) + var(--enemy-lift,0%))) scale(var(--depth-scale,1))}}
 @keyframes defenderAttack{40%{transform:translateY(-10px) scale(1.08)}100%{transform:none}}
@@ -1363,7 +1441,7 @@ body {
   .app,.game-screen{width:100%;max-width:100%;margin-inline:auto}
   .game-screen{padding-top:max(4px,env(safe-area-inset-top));padding-inline:max(4px,env(safe-area-inset-left)) max(4px,env(safe-area-inset-right))}
   .hud{top:0;margin-inline:auto}
-  .battlefield-shell{width:min(82vw,620px);margin-top:5px;margin-inline:auto}
+  .battlefield-shell{width:min(82vw,620px);margin-top:calc(var(--tile) * -1.08 + 5px);margin-inline:auto}
   .wall-hp-wrap{top:63%}
   .repair-button{top:56%;right:8px}
   .deck{width:min(96vw,744px);margin-top:calc(var(--tile) * -.92);margin-left:50%}
@@ -1372,7 +1450,7 @@ body {
 
 @media (orientation:landscape) and (max-height:520px) and (max-width:960px){
   .game-screen{padding-top:2px}
-  .battlefield-shell{margin-top:3px}
+  .battlefield-shell{margin-top:calc(var(--tile) * -1.08 + 5px)}
   .wall-hp-wrap{top:64%}
   .repair-button{top:57%}
   .deck{margin-top:calc(var(--tile) * -.86)}
