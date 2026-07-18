@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#08130f" />
+  <title>EMBERWATCH — 地城守望</title>
+  <meta name="description" content="6×8 縱向俯視棋盤格塔防遊戲" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main id="app" class="app game-blur-target">
+    <section id="gameScreen" class="game-screen" aria-label="遊戲場景">
+      <header class="hud metal-panel">
+        <div class="hud-block timer-block">
+          <span id="levelLabel" class="hud-label">第一關剩餘</span>
+          <strong id="timerText" class="timer-text">03:00</strong>
+        </div>
+        <div class="hud-block score-block" aria-label="總分數">
+          <span class="hud-label">總分數</span>
+          <strong id="scoreText">0</strong>
+        </div>
+        <div class="hud-block wave-block">
+          <span class="hud-label">威脅</span>
+          <div class="threat-track"><i id="threatFill"></i></div>
+        </div>
+        <div class="hud-actions">
+          <button id="speedButton" class="icon-button" type="button" aria-label="切換速度">×1</button>
+          <button id="pauseButton" class="icon-button" type="button" aria-label="暫停">Ⅱ</button>
+          <button id="muteButton" class="icon-button" type="button" aria-label="關閉音樂與音效" aria-pressed="true">♪</button>
+          <div class="debug-control">
+            <button id="debugButton" class="debug-button" type="button" aria-expanded="false" aria-controls="debugMenu">Debug</button>
+            <div id="debugMenu" class="debug-menu" role="group" aria-label="Debug 功能選單" hidden>
+              <div class="debug-option">
+                <span class="debug-menu-label">背景音樂</span>
+                <button id="bgmToggleButton" class="bgm-toggle is-on" type="button" aria-pressed="true">BGM ON</button>
+              </div>
+              <div class="debug-option">
+                <span class="debug-menu-label">顯示敵方 Collision</span>
+                <button id="collisionToggleButton" class="bgm-toggle collision-toggle is-off" type="button" aria-pressed="false">Collision OFF</button>
+              </div>
+              <div class="debug-option">
+                <span class="debug-menu-label">棋盤格框線</span>
+                <button id="gridToggleButton" class="bgm-toggle grid-toggle is-on" type="button" aria-pressed="true">Grid ON</button>
+              </div>
+              <div class="debug-option">
+                <span class="debug-menu-label">守軍單位</span>
+                <button id="unlockAllUnitsButton" class="bgm-toggle is-off" type="button" aria-pressed="false">全部開放</button>
+              </div>
+              <div class="debug-option">
+                <span class="debug-menu-label">測試金幣</span>
+                <button id="debugCoinsButton" class="bgm-toggle is-off" type="button">金幣設為 1,000</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <section class="battlefield-shell">
+        <div class="dungeon-crown" aria-hidden="true">
+          <span class="torch left"></span><span class="rune">✦</span><span class="torch right"></span>
+        </div>
+        <div id="board" class="board" aria-label="6乘8戰場棋盤">
+          <div id="tileLayer" class="tile-layer"></div>
+          <div id="rangeLayer" class="range-layer"></div>
+          <div id="unitLayer" class="unit-layer"></div>
+          <div id="effectLayer" class="effect-layer"></div>
+        </div>
+
+        <section id="wall" class="fortress-wall" aria-label="城牆">
+          <div class="wall-battlement" aria-hidden="true"></div>
+          <div class="wall-hp-wrap">
+            <span>城牆</span>
+            <div class="wall-hp"><i id="wallHpFill"></i></div>
+            <strong id="wallHpText">500 / 500</strong>
+          </div>
+          <button id="repairButton" class="repair-button" type="button">
+            <span class="repair-icon">⚒</span><span id="repairAmountText">維修 +50</span><small id="repairCostText">10 金</small>
+          </button>
+        </section>
+
+        <section class="corridor-shell" aria-label="二樓守軍走廊">
+          <div class="corridor-level upper"></div>
+          <div id="corridor" class="corridor">
+            <div class="corridor-rail" aria-hidden="true"></div>
+          </div>
+          <div class="corridor-level lower"></div>
+        </section>
+      </section>
+
+      <section class="deck metal-panel" aria-label="可部署單位">
+        <div class="deck-title-row">
+          <div class="deck-resource-strip" aria-label="金幣資源">
+            <div id="deckCoinPile" class="deck-coin-pile" aria-hidden="true"></div>
+            <strong id="deckCoinText" class="deck-coin-value">10</strong>
+          </div>
+          <span id="unlockText" class="deck-status" aria-hidden="true">已開放 6 / 6 格</span>
+          <div class="deck-tools">
+            <button id="recycleButton" class="recycle-button" type="button" disabled>回收 50%</button>
+          </div>
+        </div>
+        <div id="unitDeck" class="unit-deck"></div>
+        <p class="drag-hint">已部署守軍可拖曳換位；拖到另一名守軍上會直接互換位置</p>
+      </section>
+    </section>
+  </main>
+
+  <section id="titleScreen" class="title-screen" aria-label="遊戲標題畫面">
+    <div class="title-vignette"></div>
+    <div class="title-content">
+      <p class="eyebrow">A FORTRESS DEFENSE GAME</p>
+      <h1><span>EMBER</span><b>WATCH</b></h1>
+      <h2>地城守望</h2>
+      <button id="continueButton" class="continue-button" type="button">Tap to continue</button>
+      <p class="title-footnote">守住城牆，直到最後一秒</p>
+    </div>
+  </section>
+
+  <div id="countdownOverlay" class="countdown-overlay" aria-live="assertive"></div>
+  <div id="toastLayer" class="toast-layer" aria-live="polite"></div>
+  <audio id="bgmAudio" src="assets/audio/幽城深階.mp3" preload="auto" loop></audio>
+
+  <section id="resultOverlay" class="result-overlay" aria-live="assertive">
+    <div class="result-card metal-panel">
+      <p id="resultKicker">戰線失守</p>
+      <h2 id="resultTitle">遊戲失敗</h2>
+      <h3 id="resultSubtitle">你的堡壘被攻破了</h3>
+      <div class="result-stats">
+        <span>擊殺 <b id="resultKills">0</b></span>
+        <span>守城 <b id="resultTime">00:00</b></span>
+      </div>
+      <button id="restartButton" class="restart-button" type="button">再玩一次</button>
+    </div>
+  </section>
+
+  <script src="game-config.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
