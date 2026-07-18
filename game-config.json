@@ -1,6 +1,4 @@
-/* Generated from game-config.json by Defender Config Editor. */
-/* Edit with Defender-Config-Editor.exe to keep both files synchronized. */
-window.DEFENDER_CONFIG = {
+{
   "version": 1,
   "game": {
     "columns": 6,
@@ -587,4 +585,4 @@ window.DEFENDER_CONFIG = {
       }
     }
   }
-};
+}

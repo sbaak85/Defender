@@ -1,5 +1,9 @@
 # Local browser caches and temporary verification artifacts
 tmp/
+config-backups/
+tools/**/bin/
+tools/**/obj/
+tools/**/publish/
 
 # Operating-system and editor noise
 Thumbs.db

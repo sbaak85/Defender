@@ -362,7 +362,7 @@
           <img src="${CARD_STAT_ICON_PATHS.cost}" alt="" draggable="false"><strong>${unit.cost}</strong>
         </span>
         <span class="card-icon">${unit.glyph}</span><b>${unit.name}</b>`;
-      card.addEventListener("pointerdown", e => beginDrag(e, key));
+      card.addEventListener("pointerdown", e => beginDrag(e, key), { passive: false });
       card.addEventListener("click", e => {
         if (drag?.moved) return;
         e.preventDefault();
@@ -934,7 +934,7 @@
     el.dataset.col = col;
     el.innerHTML = `<div class="defender-body"><span>${base.glyph}</span></div><div class="defender-hpbar" aria-hidden="true"><i></i></div>`;
     applySprite(el.querySelector(".defender-body"), type, col);
-    el.addEventListener("pointerdown", beginDefenderDrag);
+    el.addEventListener("pointerdown", beginDefenderDrag, { passive: false });
     el.addEventListener("click", e => {
       if (drag?.moved) return;
       e.stopPropagation();
@@ -1045,7 +1045,7 @@
     drag = { type: defender.type, fromCol, moveExisting: true, id: e.pointerId, x: e.clientX, y: e.clientY, moved: false, source: e.currentTarget, ghost: null, previewCol: null };
     const onMove = ev => moveDrag(ev);
     const onUp = ev => endDrag(ev, onMove, onUp);
-    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointermove", onMove, { passive: false });
     window.addEventListener("pointerup", onUp, { once: true });
     window.addEventListener("pointercancel", onUp, { once: true });
   }
@@ -1062,7 +1062,7 @@
     drag = { type, id: e.pointerId, x: e.clientX, y: e.clientY, moved: false, source: e.currentTarget, ghost: null, previewCol: null };
     const onMove = ev => moveDrag(ev);
     const onUp = ev => endDrag(ev, onMove, onUp);
-    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointermove", onMove, { passive: false });
     window.addEventListener("pointerup", onUp, { once: true });
     window.addEventListener("pointercancel", onUp, { once: true });
   }
@@ -1079,12 +1079,18 @@
     const lastRect = slots[slots.length - 1].getBoundingClientRect();
     const corridorTop = Math.min(...slots.map(slot => slot.getBoundingClientRect().top));
     const corridorBottom = Math.max(...slots.map(slot => slot.getBoundingClientRect().bottom));
+    const defenderRects = slots
+      .map(slot => slot.querySelector(".defender")?.getBoundingClientRect())
+      .filter(Boolean);
+    const defenderTop = defenderRects.length ? Math.min(...defenderRects.map(rect => rect.top)) : corridorTop;
+    const defenderBottom = defenderRects.length ? Math.max(...defenderRects.map(rect => rect.bottom)) : corridorBottom;
     const boardRect = els.board.getBoundingClientRect();
     const bottomRowTop = boardRect.top + gridPoint(0, ROWS - 1).y * boardRect.height;
-    const hitTop = Math.min(corridorTop, bottomRowTop);
+    const hitTop = Math.min(corridorTop, bottomRowTop, defenderTop);
+    const hitBottom = Math.max(corridorBottom, defenderBottom);
     const hitLeft = firstRect.left;
     const hitRight = lastRect.right;
-    if (clientY < hitTop || clientY > corridorBottom || clientX < hitLeft || clientX > hitRight) return null;
+    if (clientY < hitTop || clientY > hitBottom || clientX < hitLeft || clientX > hitRight) return null;
     const col = Math.min(COLS - 1, Math.floor((clientX - hitLeft) / ((hitRight - hitLeft) / COLS)));
     return slots.find(slot => Number(slot.dataset.col) === col) || null;
   }
@@ -1105,6 +1111,7 @@
 
   function moveDrag(e) {
     if (!drag || e.pointerId !== drag.id) return;
+    if (e.cancelable) e.preventDefault();
     const distance = Math.hypot(e.clientX - drag.x, e.clientY - drag.y);
     if (distance < 7 && !drag.moved) return;
     if (!drag.ghost) {
