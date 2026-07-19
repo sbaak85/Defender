@@ -763,6 +763,13 @@ window.DEFENDER_CONFIG = {
           "rows": 1
         },
         "unlockLevel": 1,
+        "deploymentLimits": {
+          "1": 30,
+          "2": 22,
+          "3": 20,
+          "4": 28,
+          "5": 32
+        },
         "scoreValue": 100,
         "attackType": "melee",
         "targetMode": "wall-and-same-column-defender",
@@ -801,6 +808,13 @@ window.DEFENDER_CONFIG = {
           "rows": 1
         },
         "unlockLevel": 1,
+        "deploymentLimits": {
+          "1": 5,
+          "2": 10,
+          "3": 10,
+          "4": 15,
+          "5": 18
+        },
         "scoreValue": 220,
         "attackType": "melee",
         "targetMode": "wall-and-same-column-defender",
@@ -842,6 +856,13 @@ window.DEFENDER_CONFIG = {
           "rows": 1
         },
         "unlockLevel": 1,
+        "deploymentLimits": {
+          "1": 2,
+          "2": 6,
+          "3": 6,
+          "4": 10,
+          "5": 14
+        },
         "scoreValue": 550,
         "attackType": "magic",
         "targetMode": "wall-and-covered-column-defenders",
@@ -884,6 +905,13 @@ window.DEFENDER_CONFIG = {
           "rows": 1
         },
         "unlockLevel": 1,
+        "deploymentLimits": {
+          "1": 8,
+          "2": 12,
+          "3": 12,
+          "4": 18,
+          "5": 20
+        },
         "scoreValue": 280,
         "attackType": "melee",
         "targetMode": "wall-and-same-column-defender",
@@ -926,6 +954,13 @@ window.DEFENDER_CONFIG = {
           "rows": 1
         },
         "unlockLevel": 1,
+        "deploymentLimits": {
+          "1": 1,
+          "2": 5,
+          "3": 5,
+          "4": 8,
+          "5": 10
+        },
         "scoreValue": 900,
         "attackType": "magic",
         "targetMode": "wall-and-covered-column-defenders",
@@ -969,6 +1004,13 @@ window.DEFENDER_CONFIG = {
           "rows": 1
         },
         "unlockLevel": 3,
+        "deploymentLimits": {
+          "1": 0,
+          "2": 0,
+          "3": 6,
+          "4": 10,
+          "5": 14
+        },
         "scoreValue": 500,
         "attackType": "magic",
         "targetMode": "wall-and-same-column-defender",
@@ -1011,6 +1053,13 @@ window.DEFENDER_CONFIG = {
           "rows": 1
         },
         "unlockLevel": 3,
+        "deploymentLimits": {
+          "1": 0,
+          "2": 0,
+          "3": 4,
+          "4": 7,
+          "5": 10
+        },
         "scoreValue": 700,
         "attackType": "melee",
         "targetMode": "wall-and-same-column-defender",
@@ -1053,6 +1102,13 @@ window.DEFENDER_CONFIG = {
           "rows": 1
         },
         "unlockLevel": 3,
+        "deploymentLimits": {
+          "1": 0,
+          "2": 0,
+          "3": 15,
+          "4": 22,
+          "5": 28
+        },
         "scoreValue": 180,
         "attackType": "melee",
         "targetMode": "wall-and-same-column-defender",
@@ -1095,6 +1151,13 @@ window.DEFENDER_CONFIG = {
           "rows": 1
         },
         "unlockLevel": 3,
+        "deploymentLimits": {
+          "1": 0,
+          "2": 0,
+          "3": 8,
+          "4": 15,
+          "5": 20
+        },
         "scoreValue": 360,
         "attackType": "spear",
         "targetMode": "wall-and-same-column-defender",
@@ -1137,6 +1200,13 @@ window.DEFENDER_CONFIG = {
           "rows": 1
         },
         "unlockLevel": 3,
+        "deploymentLimits": {
+          "1": 0,
+          "2": 0,
+          "3": 2,
+          "4": 4,
+          "5": 6
+        },
         "scoreValue": 1200,
         "attackType": "melee",
         "targetMode": "wall-and-covered-column-defenders",
@@ -1179,6 +1249,13 @@ window.DEFENDER_CONFIG = {
           "rows": 1
         },
         "unlockLevel": 3,
+        "deploymentLimits": {
+          "1": 0,
+          "2": 0,
+          "3": 8,
+          "4": 15,
+          "5": 22
+        },
         "scoreValue": 340,
         "attackType": "venom",
         "targetMode": "wall-and-same-column-defender",

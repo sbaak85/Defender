@@ -58,7 +58,9 @@ internal sealed class MainForm : Form
             var editButton = card.Controls.OfType<Button>().SingleOrDefault(button => button.Text == "修改");
             if (editButton is null || editButton.Top < 0 || editButton.Bottom > card.ClientSize.Height) return false;
         }
-        return true;
+        var deploymentUnit = EnumerateUnits().First(unit => unit.Group == "player");
+        using var deploymentEditor = new UnitEditorForm(deploymentUnit, GetLevelCount());
+        return deploymentEditor.ValidateDeploymentEditor(GetLevelCount());
     }
 
     public MainForm()
@@ -240,13 +242,21 @@ internal sealed class MainForm : Form
 
     private void EditUnit(UnitCard card, UnitRef unit)
     {
-        using var editor = new UnitEditorForm(unit);
+        using var editor = new UnitEditorForm(unit, GetLevelCount());
         PositionEditor(editor, card);
         if (editor.ShowDialog(this) != DialogResult.OK || editor.UpdatedUnit is null) return;
         unit.Parent[unit.Id] = editor.UpdatedUnit;
         unit.Node = editor.UpdatedUnit;
         card.RefreshFrom(unit);
         SetDirty(true, $"已暫存：{unit.DisplayName}（尚未寫入 Config）");
+    }
+
+    private int GetLevelCount()
+    {
+        var levels = config["levels"]?.AsObject();
+        if (levels is null) return 1;
+        var numericLevels = levels.Select(pair => int.TryParse(pair.Key, out var level) ? level : 0);
+        return Math.Max(1, numericLevels.DefaultIfEmpty(1).Max());
     }
 
     private void PositionEditor(Form editor, Control card)
@@ -495,9 +505,12 @@ internal sealed class MainForm : Form
         private readonly JsonObject working;
         private readonly Dictionary<string, Control> fields = new();
         private readonly TableLayoutPanel table = new();
+        private readonly ComboBox deploymentLevel = new();
+        private readonly NumericUpDown deploymentLimit = new();
+        private readonly Button deploymentSave = new();
         public JsonObject? UpdatedUnit { get; private set; }
 
-        public UnitEditorForm(UnitRef unit)
+        public UnitEditorForm(UnitRef unit, int levelCount)
         {
             working = JsonNode.Parse(unit.Node.ToJsonString())!.AsObject();
             Text = $"修改｜{unit.DisplayName}";
@@ -535,6 +548,7 @@ internal sealed class MainForm : Form
             AddNumber("repairAmount", "維修回復血量");
             AddNumber("splashDamage", "濺射傷害");
             AddNumber("unlockLevel", "解鎖關卡");
+            if (unit.Group is "player" or "enemy") AddDeploymentLimitEditor(levelCount);
             AddNumber("scoreValue", "擊殺分數");
 
             AddSection("占格與範圍");
@@ -617,6 +631,89 @@ internal sealed class MainForm : Form
             control.Maximum = 1;
             fields[key] = control;
             AddRow(label, control, 34);
+        }
+
+        private void AddDeploymentLimitEditor(int levelCount)
+        {
+            deploymentLevel.DropDownStyle = ComboBoxStyle.DropDownList;
+            deploymentLevel.Width = 92;
+            deploymentLevel.Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Bottom;
+            for (var level = 1; level <= Math.Max(1, levelCount); level++) deploymentLevel.Items.Add($"第{level}關");
+
+            deploymentLimit.DecimalPlaces = 0;
+            deploymentLimit.Increment = 1;
+            deploymentLimit.Minimum = 0;
+            deploymentLimit.Maximum = 100000;
+            deploymentLimit.ThousandsSeparator = true;
+            deploymentLimit.Width = 82;
+            deploymentLimit.Anchor = AnchorStyles.Left | AnchorStyles.Top | AnchorStyles.Bottom;
+
+            deploymentSave.Text = "儲存";
+            deploymentSave.Width = 58;
+            deploymentSave.FlatStyle = FlatStyle.Flat;
+            deploymentSave.BackColor = Color.FromArgb(65, 78, 67);
+            deploymentSave.ForeColor = Color.FromArgb(232, 215, 166);
+            deploymentSave.FlatAppearance.BorderColor = Color.FromArgb(145, 119, 67);
+            deploymentSave.Cursor = Cursors.Hand;
+            deploymentSave.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Right;
+
+            var panel = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 3,
+                RowCount = 1,
+                Margin = new Padding(2, 3, 2, 3)
+            };
+            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 42));
+            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 35));
+            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 23));
+            panel.Controls.Add(deploymentLevel, 0, 0);
+            panel.Controls.Add(deploymentLimit, 1, 0);
+            panel.Controls.Add(deploymentSave, 2, 0);
+
+            deploymentLevel.SelectedIndexChanged += (_, _) => LoadDeploymentLimit();
+            deploymentSave.Click += (_, _) => SaveDeploymentLimit(true);
+            deploymentLevel.SelectedIndex = 0;
+            AddRow("派遣上限", panel, 40);
+        }
+
+        private JsonObject DeploymentLimits()
+        {
+            if (working["deploymentLimits"] is JsonObject limits) return limits;
+            var created = new JsonObject();
+            working["deploymentLimits"] = created;
+            return created;
+        }
+
+        private void LoadDeploymentLimit()
+        {
+            if (deploymentLevel.SelectedIndex < 0) return;
+            deploymentSave.Text = "儲存";
+            deploymentSave.ForeColor = Color.FromArgb(232, 215, 166);
+            var key = (deploymentLevel.SelectedIndex + 1).ToString(CultureInfo.InvariantCulture);
+            var value = DeploymentLimits()[key]?.GetValue<decimal>() ?? 0;
+            deploymentLimit.Value = Math.Max(deploymentLimit.Minimum, Math.Min(deploymentLimit.Maximum, value));
+        }
+
+        private void SaveDeploymentLimit(bool showFeedback)
+        {
+            if (deploymentLevel.SelectedIndex < 0) return;
+            var key = (deploymentLevel.SelectedIndex + 1).ToString(CultureInfo.InvariantCulture);
+            DeploymentLimits()[key] = decimal.Truncate(deploymentLimit.Value);
+            if (!showFeedback) return;
+            deploymentSave.Text = "已存";
+            deploymentSave.ForeColor = Color.FromArgb(157, 235, 183);
+        }
+
+        internal bool ValidateDeploymentEditor(int levelCount)
+        {
+            if (deploymentLevel.Items.Count != Math.Max(1, levelCount) || deploymentSave.Text != "儲存") return false;
+            var targetIndex = Math.Min(2, deploymentLevel.Items.Count - 1);
+            deploymentLevel.SelectedIndex = targetIndex;
+            deploymentLimit.Value = 123;
+            SaveDeploymentLimit(false);
+            var key = (targetIndex + 1).ToString(CultureInfo.InvariantCulture);
+            return DeploymentLimits()[key]?.GetValue<decimal>() == 123;
         }
 
         private void AddNestedNumber(string fieldKey, string label, string objectKey, string valueKey)
@@ -729,6 +826,7 @@ internal sealed class MainForm : Form
         {
             try
             {
+                if (deploymentLevel.Items.Count > 0) SaveDeploymentLimit(false);
                 working["displayName"] = ((TextBox)fields["displayName"]).Text.Trim();
                 working["glyph"] = ((TextBox)fields["glyph"]).Text;
                 foreach (var key in new[] { "attackDamage", "attackRange", "attackInterval", "maxHp", "resourceCost", "killReward", "moveInterval", "repairCost", "repairAmount", "splashDamage", "unlockLevel", "scoreValue" })

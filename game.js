@@ -215,7 +215,7 @@
       killScore: 0, defenseScore: 0, performanceScore: 0, wallSafeTime: 0, defenseScoreBuffer: 0, levelDamageTaken: 0,
       defenseTimeReached: false, clearPhaseElapsed: 0,
       levelBonuses: {}, awardedLevels: [], shownTipIds: [], speedIndex: 0, nextEnemyId: 1, debugAllUnitsUnlocked: false,
-      uiCooldown: 0, livingEnemies: 0, enemyTypeCounts: Object.create(null)
+      uiCooldown: 0, livingEnemies: 0, enemyTypeCounts: Object.create(null), levelSpawnedByType: Object.create(null)
     };
   }
 
@@ -495,7 +495,7 @@
         <span class="card-stat card-stat-cost" aria-label="派遣價格 ${unit.cost} 金幣">
           <img src="${CARD_STAT_ICON_PATHS.cost}" alt="" draggable="false"><strong>${unit.cost}</strong>
         </span>
-        <span class="card-icon">${unit.glyph}</span><b>${unit.name}</b>`;
+        <span class="card-icon">${unit.glyph}</span><b><span class="card-name">${unit.name}</span><span class="deployment-count" data-deployment-count></span></b>`;
       card.addEventListener("pointerdown", e => beginDrag(e, key), { passive: false });
       card.addEventListener("click", e => {
         if (drag?.moved) return;
@@ -686,7 +686,8 @@
         const cap = config.activeCaps[type];
         return !cap || (state.enemyTypeCounts[type] || 0) < cap;
       });
-      if (!unlocked.length) unlocked = ["goblin"];
+      unlocked = unlocked.filter(type => !enemySpawnLimitReached(type));
+      if (!unlocked.length) return false;
       const type = weightedChoice(unlocked, typeKey => config.weight[typeKey]);
       const base = ENEMY_TYPES[type];
       const footprint = base.footprint || 1;
@@ -730,6 +731,7 @@
     state.enemies.push(enemy);
     state.livingEnemies++;
     state.enemyTypeCounts[type] = (state.enemyTypeCounts[type] || 0) + 1;
+    state.levelSpawnedByType[type] = (state.levelSpawnedByType[type] || 0) + 1;
     state.levelSpawned++;
     addEnemyToIndexes(enemy);
     enemyLayoutDirty = true;
@@ -1279,6 +1281,7 @@
         defender.el.remove();
       }, deathDuration + 20);
       toast(`${PLAYER_TYPES[defender.type].name}陣亡`);
+      syncUI();
       syncSlots();
     }
   }
@@ -1318,12 +1321,46 @@
     return `第 ${level} 關開放`;
   }
 
+  function configuredDeploymentLimit(unit, level) {
+    const raw = unit?.deploymentLimits?.[String(level)];
+    if (raw === undefined || raw === null || raw === "") return Infinity;
+    const value = Number(raw);
+    return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : Infinity;
+  }
+
+  function deployedPlayerCount(type) {
+    return state?.defenders?.reduce((count, defender) => count + (defender && !defender.dead && defender.type === type ? 1 : 0), 0) || 0;
+  }
+
+  function playerDeploymentLimit(type) {
+    if (!state || state.debugAllUnitsUnlocked) return Infinity;
+    return configuredDeploymentLimit(PLAYER_TYPES[type], state.level);
+  }
+
+  function playerDeploymentLimitReached(type) {
+    const limit = playerDeploymentLimit(type);
+    return Number.isFinite(limit) && deployedPlayerCount(type) >= limit;
+  }
+
+  function enemySpawnLimitReached(type) {
+    const limit = configuredDeploymentLimit(ENEMY_TYPES[type], state.level);
+    return Number.isFinite(limit) && (state.levelSpawnedByType[type] || 0) >= limit;
+  }
+
+  function rejectDeploymentAtLimit(type) {
+    if (!playerDeploymentLimitReached(type)) return false;
+    sfx("deny");
+    toast("該兵種已達佈署上限");
+    return true;
+  }
+
   function selectCard(type) {
     if (!state || state.ended) return;
     if (!isUnitUnlocked(type)) {
       sfx("deny");
       return toast(unitLockLabel(type));
     }
+    if (rejectDeploymentAtLimit(type)) return;
     selectedCard = selectedCard === type ? null : type;
     selectedDefender = null;
     selectedEnemyId = null;
@@ -1384,6 +1421,7 @@
   function deploy(type, col, options = {}) {
     const base = PLAYER_TYPES[type];
     if (!isUnitUnlocked(type)) { sfx("deny"); return toast(unitLockLabel(type)); }
+    if (rejectDeploymentAtLimit(type)) return;
     if (col >= state.openSlots) return toast("這個塔樓位置尚未開放");
     let displacedTo = null;
     if (state.defenders[col]) {
@@ -1661,6 +1699,10 @@
       toast(unitLockLabel(type));
       return;
     }
+    if (rejectDeploymentAtLimit(type)) {
+      e.preventDefault();
+      return;
+    }
     e.currentTarget.setPointerCapture?.(e.pointerId);
     drag = { type, id: e.pointerId, x: e.clientX, y: e.clientY, moved: false, source: e.currentTarget, ghost: null, previewCol: null };
     const onMove = ev => moveDrag(ev);
@@ -1850,10 +1892,17 @@
       const card = unitCardCache.get(type);
       if (!card) return;
       const unlocked = isUnitUnlocked(type);
+      const deployed = deployedPlayerCount(type);
+      const limit = playerDeploymentLimit(type);
+      const limitReached = unlocked && playerDeploymentLimitReached(type);
+      const countLabel = card.querySelector("[data-deployment-count]");
+      setTextIfChanged(countLabel, `${deployed}/${Number.isFinite(limit) ? limit : "∞"}`);
       card.classList.toggle("unit-locked", !unlocked);
-      card.classList.toggle("cant-afford", unlocked && state.coins < def.cost);
+      card.classList.toggle("cant-afford", unlocked && !limitReached && state.coins < def.cost);
+      card.classList.toggle("limit-reached", limitReached);
       card.dataset.lockLabel = unlocked ? "" : unitLockLabel(type);
-      card.setAttribute("aria-disabled", String(!unlocked));
+      card.dataset.limitLabel = limitReached ? "已達上限" : "";
+      card.setAttribute("aria-disabled", String(!unlocked || limitReached));
     });
     if (els.unlockAllUnits) {
       els.unlockAllUnits.textContent = state.debugAllUnitsUnlocked ? "單位全開 ON" : "全部開放";
@@ -1963,6 +2012,7 @@
     state.enemies = [];
     state.livingEnemies = 0;
     state.enemyTypeCounts = Object.create(null);
+    state.levelSpawnedByType = Object.create(null);
     resetEnemyIndexes();
     resetVisualEffects();
     state.pendingSpawn = null;
