@@ -40,7 +40,13 @@
     troll: "assets/processed/enemy-troll.png",
     beholder: "assets/processed/enemy-beholder.png",
     wolf: "assets/processed/enemy-wolf.png",
-    octopus: "assets/processed/enemy-octopus.png"
+    octopus: "assets/processed/enemy-octopus.png",
+    ghost: "assets/processed/enemy-ghost.png",
+    animatedArmor: "assets/processed/enemy-animated-armor.png",
+    skeleton: "assets/processed/enemy-skeleton.png",
+    lizard: "assets/processed/enemy-lizard.png",
+    stoneGolem: "assets/processed/enemy-stone-golem.png",
+    spider: "assets/processed/enemy-spider.png"
   };
 
   const PERSPECTIVE_SPRITE_PATHS = {
@@ -64,11 +70,11 @@
   };
 
   const ICON_PATHS = {
-    mage: "assets/processed/icons/player-mage-icon-45.png",
-    archer: "assets/processed/icons/player-archer-icon-45.png",
-    warrior: "assets/processed/icons/player-warrior-icon-45.png",
-    cannon: "assets/processed/icons/player-cannon-icon-45.png",
-    ballista: "assets/processed/icons/player-ballista-icon-45.png"
+    mage: "assets/processed/icons/player-mage-icon-3d-v3.png?v=20260719-300",
+    archer: "assets/processed/icons/player-archer-icon-3d-v3.png?v=20260719-300",
+    warrior: "assets/processed/icons/player-warrior-icon-3d-v3.png?v=20260719-300",
+    cannon: "assets/processed/icons/player-cannon-icon-3d-v4.png?v=20260719-centered-300",
+    ballista: "assets/processed/icons/player-ballista-icon-3d-v4.png?v=20260719-centered-300"
   };
 
   const CARD_STAT_ICON_PATHS = {
@@ -163,7 +169,9 @@
   let selectedDefender = null;
   let selectedEnemyId = null;
   let selectedWall = false;
-  let orientationPausedByGuard = false;
+  let orientationPauseActive = false;
+  let focusPauseActive = false;
+  let resumeAfterSystemPause = false;
   let resultAction = "restart";
   const rangeSurfaceTiles = new Map();
 
@@ -172,6 +180,7 @@
       running: false, paused: false, ended: false, level: 1, secondsLeft: LEVEL_CONFIGS[1].duration, elapsed: 0, coins: GAME_RULES.initialResources, score: 0, wallHp: WALL_MAX_HP,
       enemies: [], defenders: Array(COLS).fill(null), openSlots: Math.min(COLS, GAME_RULES.startingOpenSlots), spawnCooldown: 1.2, pendingSpawn: null, kills: 0, levelKills: 0, levelSpawned: 0,
       killScore: 0, defenseScore: 0, performanceScore: 0, wallSafeTime: 0, defenseScoreBuffer: 0, levelDamageTaken: 0,
+      defenseTimeReached: false, clearPhaseElapsed: 0,
       levelBonuses: {}, awardedLevels: [], speedIndex: 0, nextEnemyId: 1, debugAllUnitsUnlocked: false
     };
   }
@@ -409,6 +418,7 @@
     els.restart.disabled = false;
     await playCountdown(["第一關", "3", "2", "1", "守住城牆!"]);
     state.running = true;
+    syncPageFocus();
     lastFrame = performance.now();
     raf = requestAnimationFrame(loop);
   }
@@ -443,21 +453,33 @@
     updateSafeDefenseScore(dt);
     state.secondsLeft = Math.max(0, state.secondsLeft - dt);
     const progress = 1 - state.secondsLeft / levelConfig.duration;
-    state.spawnCooldown -= dt;
-    const spawnInterval = lerp(levelConfig.spawnStart, levelConfig.spawnEnd, Math.pow(progress, .68));
-    if (state.spawnCooldown <= 0) {
-      const canAddEnemy = state.enemies.filter(e => !e.dead).length < GAME_RULES.maxActiveEnemies;
-      const spawned = canAddEnemy && spawnEnemy(progress);
-      if (spawned) state.spawnCooldown += spawnInterval * rand(.78, 1.24);
-      else state.spawnCooldown = .12;
+    if (!state.defenseTimeReached && state.secondsLeft <= 0) {
+      state.defenseTimeReached = true;
+      state.clearPhaseElapsed = 0;
+      state.pendingSpawn = null;
+      toast("成功突破防守時間，清除場上所有敵人即可過關", 3800);
+      sfx("unlock");
+    }
+    if (!state.defenseTimeReached) {
+      state.spawnCooldown -= dt;
+      const spawnInterval = lerp(levelConfig.spawnStart, levelConfig.spawnEnd, Math.pow(progress, .68));
+      if (state.spawnCooldown <= 0) {
+        const canAddEnemy = state.enemies.filter(e => !e.dead).length < GAME_RULES.maxActiveEnemies;
+        const spawned = canAddEnemy && spawnEnemy(progress);
+        if (spawned) state.spawnCooldown += spawnInterval * rand(.78, 1.24);
+        else state.spawnCooldown = .12;
+      }
+    } else {
+      state.clearPhaseElapsed += dt;
     }
 
     for (const enemy of state.enemies) updateEnemy(enemy, dt, progress);
     for (let col = 0; col < COLS; col++) if (state.defenders[col]) updateDefender(state.defenders[col], dt);
     state.enemies = state.enemies.filter(e => !e.remove);
 
+    const hasLivingEnemies = state.enemies.some(enemy => !enemy.dead && !enemy.remove);
     if (state.wallHp <= 0) endGame(false);
-    else if (state.secondsLeft <= 0) {
+    else if (state.defenseTimeReached && !hasLivingEnemies && state.clearPhaseElapsed >= 1.4) {
       if (state.level < Object.keys(LEVEL_CONFIGS).length) completeLevel();
       else endGame(true);
     }
@@ -579,13 +601,15 @@
 
   function makeEnemyElement(enemy) {
     const base = ENEMY_TYPES[enemy.type];
+    const combatType = base.range >= 2 ? "遠距" : "近戰";
+    const combatClass = base.range >= 2 ? "ranged" : "melee";
     const el = document.createElement("div");
     el.className = `game-unit enemy ${enemy.type} footprint-${enemy.footprint}`;
     el.dataset.id = enemy.id;
     el.tabIndex = 0;
     el.setAttribute("role", "button");
     el.setAttribute("aria-label", `選取${base.name}`);
-    el.innerHTML = `<div class="enemy-selection-ring" aria-hidden="true"></div><div class="body"><span class="unit-glyph">${base.glyph}</span><div class="enemy-hpbar" aria-hidden="true"><i></i></div></div><div class="unit-name-label" aria-hidden="true">${base.name}</div>`;
+    el.innerHTML = `<div class="enemy-selection-ring" aria-hidden="true"></div><div class="body"><span class="unit-glyph">${base.glyph}</span><div class="enemy-hpbar" aria-hidden="true"><i></i></div></div><div class="unit-name-label" aria-hidden="true">${base.name}<span class="enemy-combat-label ${combatClass}">${combatType}</span></div>`;
     applySprite(el.querySelector(".body"), enemy.type);
     el.addEventListener("click", e => {
       if (enemy.dead || enemy.remove) return;
@@ -599,6 +623,130 @@
       selectEnemy(enemy.id);
     });
     return el;
+  }
+
+  function elementAnchorInBoard(element, xRatio = .5, yRatio = .45) {
+    if (!element) return null;
+    const boardRect = els.board.getBoundingClientRect();
+    const elementRect = element.getBoundingClientRect();
+    const scaleX = boardRect.width / els.board.clientWidth || 1;
+    const scaleY = boardRect.height / els.board.clientHeight || 1;
+    return {
+      x: (elementRect.left + elementRect.width * xRatio - boardRect.left) / scaleX,
+      y: (elementRect.top + elementRect.height * yRatio - boardRect.top) / scaleY
+    };
+  }
+
+  function enemyAttackOrigin(enemy) {
+    const body = enemy.el?.querySelector(".body");
+    const yRatio = {
+      octopus: .36,
+      beholder: .43,
+      ghost: .42,
+      spider: .53,
+      lizard: .48
+    }[enemy.type] ?? .52;
+    const visualAnchor = elementAnchorInBoard(body, .5, yRatio);
+    if (visualAnchor) return visualAnchor;
+    const fallback = gridPoint(enemy.col + enemy.footprint / 2, enemy.row + enemy.footprint / 2);
+    return { x: fallback.x * els.board.clientWidth, y: fallback.y * els.board.clientHeight };
+  }
+
+  function enemyWallImpactPoint(enemy) {
+    const point = gridPoint(enemy.col + enemy.footprint / 2, ROWS);
+    return {
+      x: point.x * els.board.clientWidth,
+      y: point.y * els.board.clientHeight + 7
+    };
+  }
+
+  function resolveEnemyAttack(enemy, playedAttackAudio) {
+    if (!enemy || state.ended) return;
+    damageWall(enemy.damage);
+    damageDefendersInEnemyColumns(enemy);
+    const playedImpactAudio = playUnitImpactAudio(enemy.type);
+    if (!playedAttackAudio && !playedImpactAudio) sfx("wall");
+  }
+
+  function enemyMagicImpactAt(x, y, type) {
+    const fx = document.createElement("div");
+    fx.className = `enemy-magic-impact ${type}`;
+    fx.style.left = `${x}px`;
+    fx.style.top = `${y}px`;
+    fx.innerHTML = `<i></i><b></b><span></span>`;
+    els.effectLayer.append(fx);
+    setTimeout(() => fx.remove(), 620);
+  }
+
+  function launchEnemyMagicProjectile(enemy, onHit) {
+    const from = enemyAttackOrigin(enemy);
+    const to = enemyWallImpactPoint(enemy);
+    const deltaX = to.x - from.x;
+    const deltaY = to.y - from.y;
+    const flightAngle = Math.atan2(deltaY, deltaX) * 180 / Math.PI;
+    const projectile = document.createElement("div");
+    projectile.className = `enemy-magic-projectile ${enemy.type}`;
+    projectile.style.left = `${from.x}px`;
+    projectile.style.top = `${from.y}px`;
+    projectile.style.setProperty("--enemy-flight-angle", `${flightAngle}deg`);
+    projectile.innerHTML = `<i aria-hidden="true"></i>`;
+    els.effectLayer.append(projectile);
+    const distance = Math.hypot(deltaX, deltaY);
+    const duration = Math.max(240, (210 + distance * .48) / SPEEDS[state.speedIndex]);
+    const animation = projectile.animate(
+      [{ transform: "translate(0,0) scale(.72)" }, { transform: `translate(${deltaX}px,${deltaY}px) scale(1.08)` }],
+      { duration, easing: "cubic-bezier(.28,.48,.38,1)" }
+    );
+    animation.onfinish = () => {
+      projectile.remove();
+      enemyMagicImpactAt(to.x, to.y, enemy.type);
+      onHit();
+    };
+  }
+
+  function launchEnemySpearProjectile(enemy, onHit) {
+    const from = enemyAttackOrigin(enemy);
+    const to = enemyWallImpactPoint(enemy);
+    const deltaX = to.x - from.x;
+    const deltaY = to.y - from.y;
+    const flightAngle = Math.atan2(deltaY, deltaX) * 180 / Math.PI;
+    const projectile = document.createElement("div");
+    projectile.className = "enemy-spear-projectile";
+    projectile.style.left = `${from.x}px`;
+    projectile.style.top = `${from.y}px`;
+    projectile.style.setProperty("--enemy-flight-angle", `${flightAngle}deg`);
+    projectile.innerHTML = `<i aria-hidden="true"></i>`;
+    els.effectLayer.append(projectile);
+    const distance = Math.hypot(deltaX, deltaY);
+    const duration = Math.max(210, (190 + distance * .42) / SPEEDS[state.speedIndex]);
+    const animation = projectile.animate(
+      [{ transform: "translate(0,0)" }, { transform: `translate(${deltaX}px,${deltaY}px)` }],
+      { duration, easing: "linear" }
+    );
+    animation.onfinish = () => {
+      projectile.remove();
+      enemyMagicImpactAt(to.x, to.y, "lizard");
+      onHit();
+    };
+  }
+
+  function trollRangedSweep(enemy, onHit) {
+    const from = enemyAttackOrigin(enemy);
+    const to = enemyWallImpactPoint(enemy);
+    const row = Math.min(ROWS - 1, enemyFrontRow(enemy));
+    const cellWidth = Math.abs(gridPoint(enemy.col + 1, row).x - gridPoint(enemy.col, row).x) * els.board.clientWidth;
+    const fx = document.createElement("div");
+    const duration = Math.max(250, 520 / SPEEDS[state.speedIndex]);
+    fx.className = "enemy-troll-sweep";
+    fx.style.left = `${from.x}px`;
+    fx.style.top = `${from.y}px`;
+    fx.style.width = `${Math.max(118, cellWidth * 2.25)}px`;
+    fx.style.height = `${Math.max(88, to.y - from.y + 12)}px`;
+    fx.style.setProperty("--troll-sweep-duration", `${duration}ms`);
+    fx.innerHTML = `<svg viewBox="0 0 260 170" preserveAspectRatio="none" aria-hidden="true"><path class="troll-sweep-glow" pathLength="1" d="M 12 10 C 22 158 238 158 248 10"/><path class="troll-sweep-edge" pathLength="1" d="M 12 10 C 22 158 238 158 248 10"/><path class="troll-sweep-inner" pathLength="1" d="M 34 14 C 46 133 214 133 226 14"/></svg>`;
+    els.effectLayer.append(fx);
+    setTimeout(onHit, duration * .58);
+    setTimeout(() => fx.remove(), duration + 90);
   }
 
   function updateEnemy(enemy, dt) {
@@ -627,11 +775,22 @@
         enemy.attackCooldown += ENEMY_TYPES[enemy.type].attackEvery;
         enemy.el.classList.add("attacking");
         setTimeout(() => enemy.el?.classList.remove("attacking"), 300);
-        damageWall(enemy.damage);
-        damageDefendersInEnemyColumns(enemy);
         const playedAttackAudio = playUnitAttackAudio(enemy.type);
-        const playedImpactAudio = playUnitImpactAudio(enemy.type);
-        if (!playedAttackAudio && !playedImpactAudio) sfx("wall");
+        const attackType = ENEMY_TYPES[enemy.type].attackType;
+        if (!playedAttackAudio) {
+          if (attackType === "magic" || attackType === "venom") sfx("fireball");
+          else if (attackType === "spear") sfx("arrow");
+          else sfx("slash");
+        }
+        if (attackType === "magic" || attackType === "venom") {
+          launchEnemyMagicProjectile(enemy, () => resolveEnemyAttack(enemy, playedAttackAudio));
+        } else if (attackType === "spear") {
+          launchEnemySpearProjectile(enemy, () => resolveEnemyAttack(enemy, playedAttackAudio));
+        } else if (enemy.type === "troll" && wallDistance > 1) {
+          trollRangedSweep(enemy, () => resolveEnemyAttack(enemy, playedAttackAudio));
+        } else {
+          resolveEnemyAttack(enemy, playedAttackAudio);
+        }
       }
     }
   }
@@ -681,7 +840,7 @@
     if (def.attack === "slash") {
       slashAttack(defender, targets, def);
     } else if (def.attack === "shell") {
-      launchProjectile(defender, targets[0], "shell", () => cannonImpact(targets[0], def.splashDamage || def.damage, def.splashArea));
+      launchProjectile(defender, targets[0], "shell", () => cannonImpact(targets[0], def.splashDamage || def.damage, def.splashArea, defender.type));
     } else {
       launchProjectile(defender, targets[0], def.attack, () => damageEnemy(targets[0], def.damage, defender.type));
     }
@@ -745,6 +904,18 @@
     targets.forEach((target, index) => damageEnemy(target, def.splashDamage || def.damage, defender.type, index === 0));
   }
 
+  function muzzleFlashAt(x, y, kind, angle) {
+    if (kind !== "shell" && kind !== "bolt") return;
+    const fx = document.createElement("div");
+    fx.className = `muzzle-flash ${kind}`;
+    fx.style.left = `${x}px`;
+    fx.style.top = `${y}px`;
+    fx.style.setProperty("--muzzle-angle", `${angle}deg`);
+    fx.innerHTML = `<i class="muzzle-cone"></i><i class="muzzle-core"></i><i class="muzzle-ring"></i><i class="muzzle-sparks"></i>`;
+    els.effectLayer.append(fx);
+    setTimeout(() => fx.remove(), kind === "shell" ? 420 : 260);
+  }
+
   function launchProjectile(defender, enemy, kind, onHit) {
     if (!enemy || enemy.dead) return;
     const p = document.createElement("div");
@@ -754,17 +925,30 @@
     // perspective row so the two outer launchers follow the painted grid axis
     // instead of using a flat, equally-spaced screen coordinate.
     const launcherPoint = gridPoint(defender.col + .5, GAME_RULES.projectileLauncherRow);
-    const fromX = launcherPoint.x * els.board.clientWidth + GAME_RULES.projectileLauncherOffsetX;
+    const usesTurretMuzzle = defender.type === "cannon" || defender.type === "ballista";
+    const slotLauncherOffsetX = usesTurretMuzzle
+      ? Number(GAME_RULES.projectileLauncherSlotOffsetX?.[defender.col]) || 0
+      : 0;
+    const fromX = launcherPoint.x * els.board.clientWidth + GAME_RULES.projectileLauncherOffsetX + slotLauncherOffsetX;
     const fromY = launcherPoint.y * els.board.clientHeight + GAME_RULES.projectileLauncherOffsetY;
     const targetPoint = gridPoint(enemy.col + enemy.footprint / 2, enemy.row + enemy.footprint / 2);
     const toX = targetPoint.x * els.board.clientWidth;
     const toY = targetPoint.y * els.board.clientHeight;
-    const deltaX = toX - fromX;
-    const deltaY = toY - fromY;
-    const flightAngle = Math.atan2(deltaY, deltaX) * 180 / Math.PI;
-    p.style.left = `${fromX}px`;
-    p.style.top = `${fromY}px`;
+    const anchorDeltaX = toX - fromX;
+    const anchorDeltaY = toY - fromY;
+    const flightAngle = Math.atan2(anchorDeltaY, anchorDeltaX) * 180 / Math.PI;
+    // Move both the projectile and its firing flare to the same visible barrel
+    // tip. The six slot-specific X offsets remain their shared base anchor.
+    const muzzleForwardDistance = kind === "shell" ? 42 : kind === "bolt" ? 34 : 0;
+    const flightRadians = flightAngle * Math.PI / 180;
+    const muzzleX = fromX + Math.cos(flightRadians) * muzzleForwardDistance;
+    const muzzleY = fromY + Math.sin(flightRadians) * muzzleForwardDistance;
+    const deltaX = toX - muzzleX;
+    const deltaY = toY - muzzleY;
+    p.style.left = `${muzzleX}px`;
+    p.style.top = `${muzzleY}px`;
     p.style.setProperty("--flight-angle", `${flightAngle}deg`);
+    muzzleFlashAt(muzzleX, muzzleY, kind, flightAngle);
     els.effectLayer.append(p);
     const distance = Math.hypot(deltaX, deltaY);
     const duration = Math.max(80, (180 + distance * .55) / SPEEDS[state.speedIndex]);
@@ -775,12 +959,13 @@
     anim.onfinish = () => {
       p.remove();
       if (!state.ended) onHit();
-      impactAt(toX, toY, kind === "fireball" ? "#ff7c2e" : kind === "shell" ? "#ffb047" : "#6ffff0");
+      if (kind === "shell") cannonExplosionAt(toX, toY);
+      else impactAt(toX, toY, kind === "fireball" ? "#ff7c2e" : "#6ffff0");
     };
   }
 
-  function cannonImpact(center, damage, splashArea) {
-    if (!center || center.dead) return;
+  function cannonImpact(center, damage, splashArea, sourceType = "cannon") {
+    if (!center) return;
     const impactCol = Math.min(COLS - 1, center.col + Math.floor(center.footprint / 2));
     const impactRow = Math.min(ROWS - 1, center.row + Math.floor(center.footprint / 2));
     const areaColumns = Math.max(1, splashArea?.columns || 1);
@@ -791,8 +976,8 @@
     const bottomReach = areaRows - 1 - topReach;
     state.enemies
       .filter(e => !e.dead && enemyOverlapsArea(e, impactCol - leftReach, impactCol + rightReach, impactRow - topReach, impactRow + bottomReach))
-      .forEach(e => damageEnemy(e, damage));
-    sfx("boom");
+      .forEach(e => damageEnemy(e, damage, null, false));
+    if (!playDefenderHitAudio(sourceType)) sfx("boom");
   }
 
   function impactAt(x, y, color) {
@@ -801,6 +986,24 @@
     fx.style.left = `${x}px`; fx.style.top = `${y}px`; fx.style.setProperty("--impact", color);
     els.effectLayer.append(fx);
     setTimeout(() => fx.remove(), 470);
+  }
+
+  function cannonExplosionAt(x, y) {
+    const fx = document.createElement("div");
+    const blastSize = Math.max(220, Math.min(320, els.board.clientWidth / COLS * 2.75));
+    fx.className = "cannon-impact";
+    fx.style.left = `${x}px`;
+    fx.style.top = `${y}px`;
+    fx.style.setProperty("--cannon-blast-size", `${blastSize}px`);
+    const debris = Array.from({ length: 14 }, (_, index) => {
+      const angle = index * (360 / 14) + (index % 2 ? 6 : -3);
+      const distance = -(18 + index % 5 * 6);
+      const delay = (index % 4) * 18;
+      return `<b style="--debris-angle:${angle}deg;--debris-distance:${distance}%;--debris-delay:${delay}ms"></b>`;
+    }).join("");
+    fx.innerHTML = `<i class="cannon-scorch"></i><i class="cannon-blast-cloud"></i><i class="cannon-blast-core"></i><i class="cannon-shockwave secondary"></i><i class="cannon-shockwave"></i><i class="cannon-debris">${debris}</i>`;
+    els.effectLayer.append(fx);
+    setTimeout(() => fx.remove(), 1250);
   }
 
   function damageEnemy(enemy, amount, sourceType = null, playHitAudio = true) {
@@ -1381,15 +1584,20 @@
   function syncUI() {
     if (!state) return;
     const levelConfig = LEVEL_CONFIGS[state.level];
-    els.levelLabel.textContent = `第${state.level === 1 ? "一" : "二"}關剩餘`;
+    els.levelLabel.textContent = state.defenseTimeReached ? "清除剩餘敵人" : `第${levelDisplayName(state.level)}關剩餘`;
     els.timer.textContent = formatTime(Math.ceil(state.secondsLeft));
     els.score.textContent = Math.floor(state.score).toLocaleString("zh-TW");
-    if (els.deckCoinText) els.deckCoinText.textContent = Math.floor(state.coins);
+    if (els.deckCoinText) {
+      const coinValue = Math.max(0, Math.floor(state.coins));
+      const coinDigits = String(coinValue).length;
+      els.deckCoinText.textContent = coinValue;
+      els.deckCoinText.dataset.digits = String(Math.min(6, coinDigits));
+    }
     renderDeckCoins(state.coins);
     els.wallHpFill.style.width = `${state.wallHp / WALL_MAX_HP * 100}%`;
     els.wallHpText.textContent = `${Math.ceil(state.wallHp)} / ${WALL_MAX_HP}`;
     if (els.repairAmount) els.repairAmount.textContent = `維修 +${WALL_CONFIG.repairAmount}`;
-    if (els.repairCost) els.repairCost.textContent = `${WALL_CONFIG.repairCost} 金`;
+    if (els.repairCost) els.repairCost.textContent = `${WALL_CONFIG.repairCost}`;
     if (els.recycle) els.recycle.textContent = `回收 ${Math.round(GAME_RULES.recycleRefundRate * 100)}%`;
     els.unlock.textContent = `已開放 ${state.openSlots} / ${COLS} 格`;
     els.threat.style.width = `${(1 - state.secondsLeft / levelConfig.duration) * 100}%`;
@@ -1429,8 +1637,8 @@
     resultAction = "restart";
     els.restart.textContent = "再玩一次";
     els.restart.disabled = false;
-    els.resultKicker.textContent = won ? "黎明到來" : `第${state.level === 1 ? "一" : "二"}關戰線失守`;
-    els.resultTitle.textContent = won ? "兩關防守成功" : "遊戲失敗";
+    els.resultKicker.textContent = won ? "黎明到來" : `第${levelDisplayName(state.level)}關戰線失守`;
+    els.resultTitle.textContent = won ? "五關防守成功" : "遊戲失敗";
     els.resultSubtitle.textContent = won
       ? `最終關表現 +${performance.bonus.toLocaleString("zh-TW")}｜總分 ${Math.floor(state.score).toLocaleString("zh-TW")}`
       : `你的堡壘被攻破了｜總分 ${Math.floor(state.score).toLocaleString("zh-TW")}`;
@@ -1441,16 +1649,20 @@
   }
 
   function completeLevel() {
-    if (!state.running || state.level !== 1) return;
-    const performance = awardLevelPerformance(1);
+    const totalLevels = Object.keys(LEVEL_CONFIGS).length;
+    if (!state.running || state.level >= totalLevels) return;
+    const completedLevel = state.level;
+    const nextLevel = completedLevel + 1;
+    const performance = awardLevelPerformance(completedLevel);
     state.running = false;
     state.paused = true;
     resultAction = "next-level";
-    els.resultKicker.textContent = "第一關完成";
-    els.resultTitle.textContent = "第二關";
-    els.resultSubtitle.textContent = `本關表現 +${performance.bonus.toLocaleString("zh-TW")}｜準備迎接更早出現的強敵`;
+    els.resultKicker.textContent = `第${levelDisplayName(completedLevel)}關完成`;
+    els.resultTitle.textContent = `第${levelDisplayName(nextLevel)}關`;
+    const durationHint = nextLevel >= 4 ? "｜本關防守時間延長為 05:00" : "｜準備迎接更強的敵軍";
+    els.resultSubtitle.textContent = `本關表現 +${performance.bonus.toLocaleString("zh-TW")}${durationHint}`;
     els.resultKills.textContent = state.kills;
-    els.resultTime.textContent = formatTime(LEVEL_CONFIGS[1].duration);
+    els.resultTime.textContent = formatTime(LEVEL_CONFIGS[completedLevel].duration);
     els.restart.textContent = "繼續開始";
     els.restart.disabled = false;
     setTimeout(() => els.result.classList.add("show"), 260);
@@ -1458,7 +1670,9 @@
   }
 
   async function startNextLevel() {
-    if (!state || state.level !== 1 || resultAction !== "next-level") return;
+    const totalLevels = Object.keys(LEVEL_CONFIGS).length;
+    if (!state || state.level >= totalLevels || resultAction !== "next-level") return;
+    const nextLevel = state.level + 1;
     els.restart.disabled = true;
     els.result.classList.remove("show");
     state.enemies.forEach(enemy => {
@@ -1467,14 +1681,16 @@
     });
     state.enemies = [];
     state.pendingSpawn = null;
-    state.level = 2;
-    state.secondsLeft = LEVEL_CONFIGS[2].duration;
+    state.level = nextLevel;
+    state.secondsLeft = LEVEL_CONFIGS[nextLevel].duration;
     state.spawnCooldown = 1.2;
     state.levelKills = 0;
     state.levelSpawned = 0;
     state.levelDamageTaken = 0;
     state.wallSafeTime = 0;
     state.defenseScoreBuffer = 0;
+    state.defenseTimeReached = false;
+    state.clearPhaseElapsed = 0;
     state.paused = false;
     state.ended = false;
     selectedCard = null;
@@ -1485,10 +1701,14 @@
     els.wall.setAttribute("aria-selected", "false");
     showRange(null);
     syncUI();
-    await playCountdown(["第二關", "3", "2", "1", "繼續防守!"]);
+    const countdownLabels = [`第${levelDisplayName(nextLevel)}關`];
+    if (nextLevel >= 4) countdownLabels.push("防守時間延長為 05:00");
+    countdownLabels.push("3", "2", "1", "繼續防守!");
+    await playCountdown(countdownLabels);
     resultAction = "restart";
     els.restart.disabled = false;
     state.running = true;
+    syncPageFocus();
     lastFrame = performance.now();
   }
 
@@ -1580,25 +1800,39 @@
     }
   }
 
-  function syncOrientationGuard() {
-    const blocked = isBlockedMobileLandscape();
-    document.body.classList.toggle("orientation-blocked", blocked);
-    els.orientationGuard?.setAttribute("aria-hidden", String(!blocked));
-    if (blocked) {
-      if (!orientationPausedByGuard && state?.running && !state.ended && !state.paused) {
-        orientationPausedByGuard = true;
+  function syncSystemPause() {
+    const shouldPause = orientationPauseActive || focusPauseActive;
+    if (shouldPause) {
+      if (state?.running && !state.ended && !state.paused) {
         state.paused = true;
+        resumeAfterSystemPause = true;
         syncUI();
       }
+      els.bgm?.pause();
+      stopAttackAudio();
       return;
     }
-    if (!orientationPausedByGuard) return;
-    orientationPausedByGuard = false;
-    if (state?.running && !state.ended) {
-      state.paused = false;
-      syncUI();
-      toast("已恢復直式遊玩");
+    if (resumeAfterSystemPause) {
+      resumeAfterSystemPause = false;
+      if (state?.running && !state.ended) {
+        state.paused = false;
+        syncUI();
+      }
     }
+    if (gameHasStarted && bgmEnabled && !muted) startBgm();
+  }
+
+  function syncPageFocus() {
+    focusPauseActive = document.hidden || !document.hasFocus();
+    syncSystemPause();
+  }
+
+  function syncOrientationGuard() {
+    const blocked = isBlockedMobileLandscape();
+    orientationPauseActive = blocked;
+    document.body.classList.toggle("orientation-blocked", blocked);
+    els.orientationGuard?.setAttribute("aria-hidden", String(!blocked));
+    syncSystemPause();
   }
 
   function cycleSpeed() {
@@ -1607,9 +1841,9 @@
     syncUI(); sfx("click"); toast(`遊戲速度 ×${SPEEDS[state.speedIndex]}`);
   }
 
-  function toast(message) {
+  function toast(message, duration = 1850) {
     const t = document.createElement("div");
-    t.className = "toast"; t.textContent = message; els.toast.append(t); setTimeout(() => t.remove(), 1850);
+    t.className = "toast"; t.textContent = message; els.toast.append(t); setTimeout(() => t.remove(), duration);
   }
 
   function ensureAudio() {
@@ -1731,7 +1965,7 @@
   }
 
   function startBgm() {
-    if (!bgmEnabled || muted || !els.bgm) return;
+    if (!bgmEnabled || muted || !els.bgm || document.hidden || !document.hasFocus() || orientationPauseActive) return;
     els.bgm.loop = true;
     els.bgm.volume = .38;
     const playback = els.bgm.play();
@@ -1931,6 +2165,7 @@
     }
     return items[items.length - 1];
   }
+  function levelDisplayName(level) { return ["零", "一", "二", "三", "四", "五"][level] || String(level); }
   function formatTime(total) { total = Math.max(0, Math.floor(total)); return `${String(Math.floor(total/60)).padStart(2,"0")}:${String(total%60).padStart(2,"0")}`; }
 
   els.continue.addEventListener("click", beginGame);
@@ -1970,7 +2205,9 @@
     if (e.code === "Space") { e.preventDefault(); togglePause(); }
     if (e.code === "Escape") setDebugMenu(false);
   });
-  document.addEventListener("visibilitychange", () => { if (document.hidden && state?.running && !state.ended) { state.paused = true; syncUI(); } });
+  document.addEventListener("visibilitychange", syncPageFocus);
+  window.addEventListener("blur", syncPageFocus);
+  window.addEventListener("focus", syncPageFocus);
   document.addEventListener("fullscreenchange", syncFullscreenUI);
   document.addEventListener("webkitfullscreenchange", syncFullscreenUI);
   window.addEventListener("orientationchange", () => setTimeout(syncOrientationGuard, 80));
@@ -1982,6 +2219,7 @@
   syncCollisionUI();
   syncGridUI();
   syncFullscreenUI();
+  syncPageFocus();
   syncOrientationGuard();
   preloadAttackAudio();
   loadSprites();

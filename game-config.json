@@ -17,6 +17,14 @@
     "enemyMoveSpeedVariance": 0.08,
     "projectileLauncherRow": 8,
     "projectileLauncherOffsetX": 0,
+    "projectileLauncherSlotOffsetX": [
+      -22,
+      -14,
+      0,
+      0,
+      14,
+      22
+    ],
     "projectileLauncherOffsetY": 0,
     "hpBarVisibleSeconds": 3,
     "defenderDeathFadeSeconds": 0.5,
@@ -53,6 +61,24 @@
         "wallPreservation": 1500,
         "clearance": 1200,
         "flawless": 800
+      },
+      "3": {
+        "clear": 2200,
+        "wallPreservation": 1900,
+        "clearance": 1600,
+        "flawless": 1000
+      },
+      "4": {
+        "clear": 3200,
+        "wallPreservation": 2500,
+        "clearance": 2100,
+        "flawless": 1300
+      },
+      "5": {
+        "clear": 4500,
+        "wallPreservation": 3200,
+        "clearance": 2800,
+        "flawless": 1700
       }
     }
   },
@@ -67,14 +93,26 @@
         "wolf": 0.12,
         "troll": 0.28,
         "beholder": 0.55,
-        "octopus": 0.82
+        "octopus": 0.82,
+        "ghost": 2,
+        "animatedArmor": 2,
+        "skeleton": 2,
+        "lizard": 2,
+        "stoneGolem": 2,
+        "spider": 2
       },
       "weight": {
         "goblin": 7,
         "wolf": 1.8,
         "troll": 1.25,
         "beholder": 0.28,
-        "octopus": 0.12
+        "octopus": 0.12,
+        "ghost": 0,
+        "animatedArmor": 0,
+        "skeleton": 0,
+        "lizard": 0,
+        "stoneGolem": 0,
+        "spider": 0
       },
       "activeCaps": {
         "beholder": 1,
@@ -93,18 +131,153 @@
         "wolf": 0.04,
         "troll": 0.1,
         "beholder": 0.27,
-        "octopus": 0.5
+        "octopus": 0.5,
+        "ghost": 2,
+        "animatedArmor": 2,
+        "skeleton": 2,
+        "lizard": 2,
+        "stoneGolem": 2,
+        "spider": 2
       },
       "weight": {
         "goblin": 1.1,
         "wolf": 1,
         "troll": 1,
         "beholder": 0.9,
-        "octopus": 0.8
+        "octopus": 0.8,
+        "ghost": 0,
+        "animatedArmor": 0,
+        "skeleton": 0,
+        "lizard": 0,
+        "stoneGolem": 0,
+        "spider": 0
       },
       "activeCaps": {},
       "scaleStart": 1,
       "scaleGrowth": 1.25
+    },
+    "3": {
+      "duration": 180,
+      "spawnStart": 4.8,
+      "spawnEnd": 0.82,
+      "openingGoblinOnly": 0.03,
+      "unlock": {
+        "goblin": 0,
+        "wolf": 0,
+        "skeleton": 0,
+        "troll": 0.06,
+        "lizard": 0.12,
+        "beholder": 0.22,
+        "spider": 0.32,
+        "ghost": 0.38,
+        "octopus": 0.52,
+        "animatedArmor": 0.62,
+        "stoneGolem": 0.78
+      },
+      "weight": {
+        "goblin": 0.9,
+        "wolf": 0.7,
+        "skeleton": 1.5,
+        "troll": 0.8,
+        "lizard": 0.9,
+        "beholder": 0.55,
+        "spider": 0.7,
+        "ghost": 0.45,
+        "octopus": 0.36,
+        "animatedArmor": 0.28,
+        "stoneGolem": 0.12
+      },
+      "activeCaps": {
+        "beholder": 2,
+        "octopus": 2,
+        "ghost": 2,
+        "animatedArmor": 2,
+        "stoneGolem": 1
+      },
+      "scaleStart": 1.05,
+      "scaleGrowth": 1.28
+    },
+    "4": {
+      "duration": 300,
+      "spawnStart": 5.2,
+      "spawnEnd": 0.9,
+      "openingGoblinOnly": 0,
+      "unlock": {
+        "goblin": 0,
+        "wolf": 0,
+        "skeleton": 0,
+        "troll": 0,
+        "lizard": 0.04,
+        "beholder": 0.1,
+        "spider": 0.12,
+        "ghost": 0.18,
+        "octopus": 0.28,
+        "animatedArmor": 0.35,
+        "stoneGolem": 0.48
+      },
+      "weight": {
+        "goblin": 0.55,
+        "wolf": 0.55,
+        "skeleton": 1.1,
+        "troll": 0.75,
+        "lizard": 1,
+        "beholder": 0.7,
+        "spider": 0.85,
+        "ghost": 0.62,
+        "octopus": 0.48,
+        "animatedArmor": 0.42,
+        "stoneGolem": 0.18
+      },
+      "activeCaps": {
+        "beholder": 2,
+        "octopus": 2,
+        "ghost": 3,
+        "animatedArmor": 2,
+        "stoneGolem": 1
+      },
+      "scaleStart": 1.1,
+      "scaleGrowth": 1.38
+    },
+    "5": {
+      "duration": 300,
+      "spawnStart": 4.8,
+      "spawnEnd": 0.78,
+      "openingGoblinOnly": 0,
+      "unlock": {
+        "goblin": 0,
+        "wolf": 0,
+        "skeleton": 0,
+        "troll": 0,
+        "lizard": 0,
+        "beholder": 0.04,
+        "spider": 0.05,
+        "ghost": 0.08,
+        "octopus": 0.16,
+        "animatedArmor": 0.2,
+        "stoneGolem": 0.3
+      },
+      "weight": {
+        "goblin": 0.35,
+        "wolf": 0.45,
+        "skeleton": 0.9,
+        "troll": 0.7,
+        "lizard": 1,
+        "beholder": 0.82,
+        "spider": 1,
+        "ghost": 0.78,
+        "octopus": 0.62,
+        "animatedArmor": 0.55,
+        "stoneGolem": 0.24
+      },
+      "activeCaps": {
+        "beholder": 3,
+        "octopus": 2,
+        "ghost": 3,
+        "animatedArmor": 2,
+        "stoneGolem": 1
+      },
+      "scaleStart": 1.15,
+      "scaleGrowth": 1.5
     }
   },
   "units": {
@@ -381,7 +554,7 @@
         "faction": "player",
         "glyph": "\u2699\uFE0F",
         "attackDamage": 4,
-        "attackRange": 9,
+        "attackRange": 7,
         "maxHp": 145,
         "resourceCost": 8,
         "killReward": 0,
@@ -406,10 +579,21 @@
         "audio": {
           "cast": {
             "chance": 0,
-            "files": []
+            "files": [],
+            "mode": "random"
           },
-          "attack": [],
-          "impact": [],
+          "attack": [
+            {
+              "path": "assets/audio/\u97F3\u6548/defense1.mp3",
+              "volume": 0.7
+            }
+          ],
+          "impact": [
+            {
+              "path": "assets/audio/\u97F3\u6548/damage3.mp3",
+              "volume": 0.2
+            }
+          ],
           "death": [],
           "deploy": [
             {
@@ -428,7 +612,13 @@
               "path": "assets/audio/\u97F3\u6548/Change.mp3",
               "volume": 1
             }
-          ]
+          ],
+          "attackMode": "random",
+          "impactMode": "all",
+          "deathMode": "random",
+          "deployMode": "random",
+          "moveMode": "random",
+          "swapMode": "random"
         }
       },
       "cannon": {
@@ -461,10 +651,29 @@
         "audio": {
           "cast": {
             "chance": 0,
-            "files": []
+            "files": [],
+            "mode": "random"
           },
-          "attack": [],
-          "impact": [],
+          "attack": [
+            {
+              "path": "assets/audio/\u97F3\u6548/cannon1.mp3",
+              "volume": 1
+            }
+          ],
+          "impact": [
+            {
+              "path": "assets/audio/\u97F3\u6548/\u5168\u529B\u3067\u8E0F\u307F\u8FBC\u3080.mp3",
+              "volume": 1
+            },
+            {
+              "path": "assets/audio/\u97F3\u6548/\u30D0\u30BF\u30F3\u3068\u5012\u308C\u308B.mp3",
+              "volume": 0.8
+            },
+            {
+              "path": "assets/audio/\u97F3\u6548/\u77F3\u304C\u7815\u3051\u308B.mp3",
+              "volume": 0.7
+            }
+          ],
           "death": [],
           "deploy": [
             {
@@ -483,7 +692,13 @@
               "path": "assets/audio/\u97F3\u6548/Change.mp3",
               "volume": 1
             }
-          ]
+          ],
+          "attackMode": "random",
+          "impactMode": "all",
+          "deathMode": "random",
+          "deployMode": "random",
+          "moveMode": "random",
+          "swapMode": "random"
         }
       }
     },
@@ -675,7 +890,7 @@
         },
         "unlockLevel": 1,
         "scoreValue": 900,
-        "attackType": "melee",
+        "attackType": "magic",
         "targetMode": "wall-and-covered-column-defenders",
         "canOverlapAtWall": true,
         "audio": {
@@ -692,6 +907,258 @@
           "deathMode": "random"
         },
         "stopAtMaxRangeChance": 0.50
+      },
+      "ghost": {
+        "displayName": "\u5E7D\u9B42\u738B",
+        "faction": "enemy",
+        "glyph": "\uD83D\uDC7B",
+        "attackDamage": 8,
+        "attackRange": 3,
+        "stopAtMaxRangeChance": 0.75,
+        "maxHp": 95,
+        "resourceCost": 0,
+        "killReward": 4,
+        "moveInterval": 2.8,
+        "footprint": {
+          "columns": 1,
+          "rows": 1
+        },
+        "repairCost": 0,
+        "repairAmount": 0,
+        "attackInterval": 3.5,
+        "splashDamage": 7,
+        "splashArea": {
+          "columns": 1,
+          "rows": 1
+        },
+        "unlockLevel": 3,
+        "scoreValue": 500,
+        "attackType": "magic",
+        "targetMode": "wall-and-same-column-defender",
+        "canOverlapAtWall": true,
+        "audio": {
+          "cast": {
+            "chance": 0,
+            "files": [],
+            "mode": "random"
+          },
+          "attack": [],
+          "impact": [],
+          "death": [],
+          "attackMode": "random",
+          "impactMode": "all",
+          "deathMode": "random"
+        }
+      },
+      "animatedArmor": {
+        "displayName": "\u9B54\u93A7\u885B\u58EB",
+        "faction": "enemy",
+        "glyph": "\u265E",
+        "attackDamage": 12,
+        "attackRange": 1,
+        "stopAtMaxRangeChance": 0,
+        "maxHp": 150,
+        "resourceCost": 0,
+        "killReward": 6,
+        "moveInterval": 3.4,
+        "footprint": {
+          "columns": 1,
+          "rows": 1
+        },
+        "repairCost": 0,
+        "repairAmount": 0,
+        "attackInterval": 3.6,
+        "splashDamage": 10,
+        "splashArea": {
+          "columns": 1,
+          "rows": 1
+        },
+        "unlockLevel": 3,
+        "scoreValue": 700,
+        "attackType": "melee",
+        "targetMode": "wall-and-same-column-defender",
+        "canOverlapAtWall": true,
+        "audio": {
+          "cast": {
+            "chance": 0,
+            "files": [],
+            "mode": "random"
+          },
+          "attack": [],
+          "impact": [],
+          "death": [],
+          "attackMode": "random",
+          "impactMode": "all",
+          "deathMode": "random"
+        }
+      },
+      "skeleton": {
+        "displayName": "\u9AB7\u9ACF\u5175",
+        "faction": "enemy",
+        "glyph": "\uD83D\uDC80",
+        "attackDamage": 4,
+        "attackRange": 1,
+        "stopAtMaxRangeChance": 0,
+        "maxHp": 45,
+        "resourceCost": 0,
+        "killReward": 2,
+        "moveInterval": 1.75,
+        "footprint": {
+          "columns": 1,
+          "rows": 1
+        },
+        "repairCost": 0,
+        "repairAmount": 0,
+        "attackInterval": 2.4,
+        "splashDamage": 3,
+        "splashArea": {
+          "columns": 1,
+          "rows": 1
+        },
+        "unlockLevel": 3,
+        "scoreValue": 180,
+        "attackType": "melee",
+        "targetMode": "wall-and-same-column-defender",
+        "canOverlapAtWall": true,
+        "audio": {
+          "cast": {
+            "chance": 0,
+            "files": [],
+            "mode": "random"
+          },
+          "attack": [],
+          "impact": [],
+          "death": [],
+          "attackMode": "random",
+          "impactMode": "all",
+          "deathMode": "random"
+        }
+      },
+      "lizard": {
+        "displayName": "\u8725\u8734\u69CD\u5175",
+        "faction": "enemy",
+        "glyph": "\uD83E\uDD8E",
+        "attackDamage": 7,
+        "attackRange": 2,
+        "stopAtMaxRangeChance": 0.45,
+        "maxHp": 85,
+        "resourceCost": 0,
+        "killReward": 3,
+        "moveInterval": 2.2,
+        "footprint": {
+          "columns": 1,
+          "rows": 1
+        },
+        "repairCost": 0,
+        "repairAmount": 0,
+        "attackInterval": 3,
+        "splashDamage": 6,
+        "splashArea": {
+          "columns": 1,
+          "rows": 1
+        },
+        "unlockLevel": 3,
+        "scoreValue": 360,
+        "attackType": "spear",
+        "targetMode": "wall-and-same-column-defender",
+        "canOverlapAtWall": true,
+        "audio": {
+          "cast": {
+            "chance": 0,
+            "files": [],
+            "mode": "random"
+          },
+          "attack": [],
+          "impact": [],
+          "death": [],
+          "attackMode": "random",
+          "impactMode": "all",
+          "deathMode": "random"
+        }
+      },
+      "stoneGolem": {
+        "displayName": "\u5CA9\u7532\u5DE8\u50CF",
+        "faction": "enemy",
+        "glyph": "\uD83E\uDEA8",
+        "attackDamage": 18,
+        "attackRange": 1,
+        "stopAtMaxRangeChance": 0,
+        "maxHp": 220,
+        "resourceCost": 0,
+        "killReward": 10,
+        "moveInterval": 5,
+        "footprint": {
+          "columns": 2,
+          "rows": 2
+        },
+        "repairCost": 0,
+        "repairAmount": 0,
+        "attackInterval": 4.5,
+        "splashDamage": 15,
+        "splashArea": {
+          "columns": 2,
+          "rows": 1
+        },
+        "unlockLevel": 3,
+        "scoreValue": 1200,
+        "attackType": "melee",
+        "targetMode": "wall-and-covered-column-defenders",
+        "canOverlapAtWall": true,
+        "audio": {
+          "cast": {
+            "chance": 0,
+            "files": [],
+            "mode": "random"
+          },
+          "attack": [],
+          "impact": [],
+          "death": [],
+          "attackMode": "random",
+          "impactMode": "all",
+          "deathMode": "random"
+        }
+      },
+      "spider": {
+        "displayName": "\u9B54\u6676\u6BD2\u86DB",
+        "faction": "enemy",
+        "glyph": "\uD83D\uDD77\uFE0F",
+        "attackDamage": 6,
+        "attackRange": 3,
+        "stopAtMaxRangeChance": 0.8,
+        "maxHp": 70,
+        "resourceCost": 0,
+        "killReward": 3,
+        "moveInterval": 1.65,
+        "footprint": {
+          "columns": 1,
+          "rows": 1
+        },
+        "repairCost": 0,
+        "repairAmount": 0,
+        "attackInterval": 2.6,
+        "splashDamage": 5,
+        "splashArea": {
+          "columns": 1,
+          "rows": 1
+        },
+        "unlockLevel": 3,
+        "scoreValue": 340,
+        "attackType": "venom",
+        "targetMode": "wall-and-same-column-defender",
+        "canOverlapAtWall": true,
+        "audio": {
+          "cast": {
+            "chance": 0,
+            "files": [],
+            "mode": "random"
+          },
+          "attack": [],
+          "impact": [],
+          "death": [],
+          "attackMode": "random",
+          "impactMode": "all",
+          "deathMode": "random"
+        }
       }
     }
   }

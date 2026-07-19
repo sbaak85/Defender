@@ -11,7 +11,7 @@
   <meta name="description" content="6×8 縱向俯視棋盤格塔防遊戲" />
   <link rel="manifest" href="manifest.webmanifest?v=20260718-portrait-v1" />
   <link rel="apple-touch-icon" href="assets/processed/icons/player-warrior-icon-45.png" />
-  <link rel="stylesheet" href="styles.css?v=20260718-mobile-portrait-v12" />
+  <link rel="stylesheet" href="styles.css?v=20260719-enemies-levels-v21" />
 </head>
 <body>
   <main id="app" class="app game-blur-target">
@@ -79,9 +79,6 @@
             <div class="wall-hp"><i id="wallHpFill"></i></div>
             <strong id="wallHpText">500 / 500</strong>
           </div>
-          <button id="repairButton" class="repair-button" type="button">
-            <span class="repair-icon">⚒</span><span id="repairAmountText">維修 +50</span><small id="repairCostText">10 金</small>
-          </button>
         </section>
 
         <section class="corridor-shell" aria-label="二樓守軍走廊">
@@ -93,6 +90,13 @@
         </section>
       </section>
 
+      <div class="battle-action-bar" aria-label="城牆與守軍操作">
+        <button id="recycleButton" class="recycle-button" type="button" disabled>回收 50%</button>
+        <button id="repairButton" class="repair-button" type="button">
+          <span class="repair-icon">⚒</span><span id="repairAmountText">維修 +50</span><small id="repairCostText">10</small>
+        </button>
+      </div>
+
       <section class="deck metal-panel" aria-label="可部署單位">
         <div class="deck-title-row">
           <div class="deck-resource-strip" aria-label="金幣資源">
@@ -100,9 +104,6 @@
             <strong id="deckCoinText" class="deck-coin-value">10</strong>
           </div>
           <span id="unlockText" class="deck-status" aria-hidden="true">已開放 6 / 6 格</span>
-          <div class="deck-tools">
-            <button id="recycleButton" class="recycle-button" type="button" disabled>回收 50%</button>
-          </div>
         </div>
         <div id="unitDeck" class="unit-deck"></div>
         <p class="drag-hint">已部署守軍可拖曳換位；拖到另一名守軍上會直接互換位置</p>
@@ -152,7 +153,7 @@
     </div>
   </section>
 
-  <script src="game-config.js?v=20260718-player-place-volume-v12"></script>
-  <script src="game.js?v=20260718-mobile-fullscreen-v15"></script>
+  <script src="game-config.js?v=20260719-enemies-levels-v16"></script>
+  <script src="game.js?v=20260719-enemies-levels-v31"></script>
 </body>
 </html>

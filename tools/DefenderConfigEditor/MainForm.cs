@@ -49,7 +49,9 @@ internal sealed class MainForm : Form
         PerformLayout();
         ResizeCards();
         cardGrid.PerformLayout();
-        if (cards.Count != 11) return false;
+        var units = config["units"]!.AsObject();
+        var expectedCards = 1 + units["player"]!.AsObject().Count + units["enemy"]!.AsObject().Count;
+        if (cards.Count != expectedCards) return false;
         foreach (var card in cards)
         {
             card.PerformLayout();
