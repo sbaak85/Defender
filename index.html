@@ -11,14 +11,17 @@
   <meta name="description" content="6×8 縱向俯視棋盤格塔防遊戲" />
   <link rel="manifest" href="manifest.webmanifest?v=20260718-portrait-v1" />
   <link rel="apple-touch-icon" href="assets/processed/icons/player-warrior-icon-45.png" />
-  <link rel="stylesheet" href="styles.css?v=20260719-performance-v22" />
+  <link rel="stylesheet" href="styles.css?v=20260719-intermission-tips-v26" />
 </head>
 <body>
   <main id="app" class="app game-blur-target">
     <section id="gameScreen" class="game-screen" aria-label="遊戲場景">
       <header class="hud metal-panel">
         <div class="hud-block timer-block">
-          <span id="levelLabel" class="hud-label">第一關剩餘</span>
+          <div class="timer-heading">
+            <span id="levelLabel" class="hud-label">剩餘時間</span>
+            <strong id="levelProgress" class="level-progress">1 / 5關</strong>
+          </div>
           <strong id="timerText" class="timer-text">03:00</strong>
         </div>
         <div class="hud-block score-block" aria-label="總分數">
@@ -29,37 +32,45 @@
           <span class="hud-label">威脅</span>
           <div class="threat-track"><i id="threatFill"></i></div>
         </div>
-        <div class="hud-actions">
-          <button id="speedButton" class="icon-button" type="button" aria-label="切換速度">×1</button>
-          <button id="pauseButton" class="icon-button" type="button" aria-label="暫停">Ⅱ</button>
-          <button id="muteButton" class="icon-button" type="button" aria-label="關閉音樂與音效" aria-pressed="true">♪</button>
-          <div class="debug-control">
-            <button id="debugButton" class="debug-button" type="button" aria-expanded="false" aria-controls="debugMenu">Debug</button>
-            <div id="debugMenu" class="debug-menu" role="group" aria-label="Debug 功能選單" hidden>
-              <div class="debug-option">
-                <span class="debug-menu-label">背景音樂</span>
-                <button id="bgmToggleButton" class="bgm-toggle is-on" type="button" aria-pressed="true">BGM ON</button>
-              </div>
-              <div class="debug-option">
-                <span class="debug-menu-label">顯示敵方 Collision</span>
-                <button id="collisionToggleButton" class="bgm-toggle collision-toggle is-off" type="button" aria-pressed="false">Collision OFF</button>
-              </div>
-              <div class="debug-option">
-                <span class="debug-menu-label">棋盤格框線</span>
-                <button id="gridToggleButton" class="bgm-toggle grid-toggle is-off" type="button" aria-pressed="false">Grid OFF</button>
-              </div>
-              <div class="debug-option">
-                <span class="debug-menu-label">守軍單位</span>
-                <button id="unlockAllUnitsButton" class="bgm-toggle is-off" type="button" aria-pressed="false">全部開放</button>
-              </div>
-              <div class="debug-option">
-                <span class="debug-menu-label">測試金幣</span>
-                <button id="debugCoinsButton" class="bgm-toggle is-off" type="button">金幣設為 1,000</button>
-              </div>
-            </div>
+        <div class="hud-block speed-block" aria-label="遊戲速度控制">
+          <span class="hud-label">遊戲速度</span>
+          <div class="speed-control">
+            <button id="speedDownButton" class="icon-button speed-step-button" type="button" aria-label="減速">−</button>
+            <strong id="speedDisplay" class="speed-display">×1</strong>
+            <button id="speedUpButton" class="icon-button speed-step-button" type="button" aria-label="加速">＋</button>
           </div>
         </div>
+        <div class="hud-actions">
+          <button id="pauseButton" class="icon-button" type="button" aria-label="暫停">Ⅱ</button>
+          <button id="muteButton" class="icon-button" type="button" aria-label="關閉音樂與音效" aria-pressed="true">♪</button>
+        </div>
       </header>
+
+      <div class="debug-control hud-debug-control">
+        <button id="debugButton" class="debug-button" type="button" aria-expanded="false" aria-controls="debugMenu">Debug</button>
+        <div id="debugMenu" class="debug-menu" role="group" aria-label="Debug 功能選單" hidden>
+          <div class="debug-option">
+            <span class="debug-menu-label">背景音樂</span>
+            <button id="bgmToggleButton" class="bgm-toggle is-on" type="button" aria-pressed="true">BGM ON</button>
+          </div>
+          <div class="debug-option">
+            <span class="debug-menu-label">顯示敵方 Collision</span>
+            <button id="collisionToggleButton" class="bgm-toggle collision-toggle is-off" type="button" aria-pressed="false">Collision OFF</button>
+          </div>
+          <div class="debug-option">
+            <span class="debug-menu-label">棋盤格框線</span>
+            <button id="gridToggleButton" class="bgm-toggle grid-toggle is-off" type="button" aria-pressed="false">Grid OFF</button>
+          </div>
+          <div class="debug-option">
+            <span class="debug-menu-label">守軍單位</span>
+            <button id="unlockAllUnitsButton" class="bgm-toggle is-off" type="button" aria-pressed="false">全部開放</button>
+          </div>
+          <div class="debug-option">
+            <span class="debug-menu-label">測試金幣</span>
+            <button id="debugCoinsButton" class="bgm-toggle is-off" type="button">金幣設為 1,000</button>
+          </div>
+        </div>
+      </div>
 
       <section class="battlefield-shell">
         <div class="dungeon-crown" aria-hidden="true">
@@ -149,11 +160,15 @@
         <span>擊殺 <b id="resultKills">0</b></span>
         <span>守城 <b id="resultTime">00:00</b></span>
       </div>
+      <aside id="resultTip" class="result-tip" hidden>
+        <strong>守城提示</strong>
+        <span id="resultTipText"></span>
+      </aside>
       <button id="restartButton" class="restart-button" type="button">再玩一次</button>
     </div>
   </section>
 
-  <script src="game-config.js?v=20260719-performance-v18"></script>
-  <script src="game.js?v=20260719-performance-v32"></script>
+  <script src="game-config.js?v=20260719-deployment-limits-v20"></script>
+  <script src="game.js?v=20260719-occupied-drop-v38"></script>
 </body>
 </html>

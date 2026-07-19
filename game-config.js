@@ -9,7 +9,7 @@ window.DEFENDER_CONFIG = {
     "gameSpeeds": [
       1,
       5,
-      20
+      10
     ],
     "startingOpenSlots": 6,
     "slotUnlockInterval": 40,
@@ -344,6 +344,13 @@ window.DEFENDER_CONFIG = {
           "rows": 1
         },
         "unlockLevel": 1,
+        "deploymentLimits": {
+          "1": 3,
+          "2": 3,
+          "3": 4,
+          "4": 5,
+          "5": 5
+        },
         "scoreValue": 0,
         "attackType": "fireball",
         "targetMode": "same-column-nearest-wall",
@@ -418,6 +425,13 @@ window.DEFENDER_CONFIG = {
           "rows": 1
         },
         "unlockLevel": 1,
+        "deploymentLimits": {
+          "1": 3,
+          "2": 3,
+          "3": 4,
+          "4": 5,
+          "5": 5
+        },
         "scoreValue": 0,
         "attackType": "arrow",
         "targetMode": "same-column-nearest-wall",
@@ -492,6 +506,13 @@ window.DEFENDER_CONFIG = {
           "rows": 2
         },
         "unlockLevel": 0,
+        "deploymentLimits": {
+          "1": 2,
+          "2": 2,
+          "3": 3,
+          "4": 4,
+          "5": 5
+        },
         "scoreValue": 0,
         "attackType": "slash",
         "targetMode": "area-nearest-wall",
@@ -558,7 +579,7 @@ window.DEFENDER_CONFIG = {
         "attackDamage": 4,
         "attackRange": 7,
         "maxHp": 145,
-        "resourceCost": 8,
+        "resourceCost": 12,
         "killReward": 0,
         "moveInterval": 0,
         "footprint": {
@@ -574,6 +595,13 @@ window.DEFENDER_CONFIG = {
           "rows": 1
         },
         "unlockLevel": 2,
+        "deploymentLimits": {
+          "1": 0,
+          "2": 1,
+          "3": 1,
+          "4": 2,
+          "5": 2
+        },
         "scoreValue": 0,
         "attackType": "bolt",
         "targetMode": "same-column-nearest-wall",
@@ -630,7 +658,7 @@ window.DEFENDER_CONFIG = {
         "attackDamage": 100,
         "attackRange": 8,
         "maxHp": 190,
-        "resourceCost": 10,
+        "resourceCost": 20,
         "killReward": 0,
         "moveInterval": 0,
         "footprint": {
@@ -646,6 +674,13 @@ window.DEFENDER_CONFIG = {
           "rows": 3
         },
         "unlockLevel": 3,
+        "deploymentLimits": {
+          "1": 0,
+          "2": 0,
+          "3": 1,
+          "4": 2,
+          "5": 2
+        },
         "scoreValue": 0,
         "attackType": "shell",
         "targetMode": "area-nearest-wall",
@@ -1041,8 +1076,8 @@ window.DEFENDER_CONFIG = {
         "faction": "enemy",
         "glyph": "\uD83E\uDD8E",
         "attackDamage": 7,
-        "attackRange": 2,
-        "stopAtMaxRangeChance": 0.45,
+        "attackRange": 3,
+        "stopAtMaxRangeChance": 0.65,
         "maxHp": 85,
         "resourceCost": 0,
         "killReward": 3,
@@ -1125,7 +1160,7 @@ window.DEFENDER_CONFIG = {
         "faction": "enemy",
         "glyph": "\uD83D\uDD77\uFE0F",
         "attackDamage": 6,
-        "attackRange": 3,
+        "attackRange": 4,
         "stopAtMaxRangeChance": 0.8,
         "maxHp": 70,
         "resourceCost": 0,

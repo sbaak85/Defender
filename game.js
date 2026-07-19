@@ -23,12 +23,27 @@
   const GRID_COLUMN_SPACING_SLOPE = .043313;
   const ENEMY_DEPTH_SCALES = [.93, .95, .97, .996, 1.018, 1.04, 1.07, 1.105];
   const WALL_MAX_HP = WALL_CONFIG.maxHp;
+  const WALL_WARNING_YELLOW_RATIO = .49;
+  const WALL_WARNING_RED_RATIO = .10;
   const SPEEDS = GAME_RULES.gameSpeeds;
   const UNIT_UNLOCK_LEVEL = Object.fromEntries(
     Object.entries(GAME_CONFIG.units.player).map(([type, unit]) => [type, unit.unlockLevel || 1])
   );
   const SCORE_RULES = GAME_CONFIG.scoring;
   const LEVEL_CONFIGS = GAME_CONFIG.levels;
+  const TOTAL_LEVELS = Object.keys(LEVEL_CONFIGS).filter(level => Number(level) > 0).length;
+  const INTERMISSION_TIPS = Object.freeze([
+    { id: "repair-wall", text: "開戰之前記得維修城牆喔！", lowWallOnly: true },
+    { id: "beholder", text: "眼魔是恐怖的敵人，不僅皮硬肉厚，還能從遠距發動攻擊。", enemy: "beholder" },
+    { id: "clear-phase", text: "防守時間歸零後敵人會停止增援，清除場上所有敵人才能過關。", minLevel: 2 },
+    { id: "move-defender", text: "選定守軍後點擊空走廊格即可移動；要和其他守軍換位則需要拖曳。", minLevel: 2 },
+    { id: "recycle", text: "不再需要的守軍可以回收，取回一半派遣金幣重新配置陣線。", minLevel: 2 },
+    { id: "troll-range", text: "巨魔有時會停在兩格外發動攻擊，別只盯著貼近城牆的敵人。", minLevel: 2, enemy: "troll" },
+    { id: "ballista", text: "弩砲射速極快，適合持續壓制單一路線上的密集敵人。", minLevel: 2 },
+    { id: "cannon", text: "加農砲價格昂貴，但砲彈能對三乘三範圍造成強力濺射傷害。", minLevel: 3 },
+    { id: "large-enemies", text: "眼魔與章魚怪會占用二乘二格，請預留足夠火力處理大型目標。", minLevel: 2, enemy: "octopus" },
+    { id: "long-defense", text: "第4關起防守時間延長為五分鐘，開戰前請先整頓城牆、兵力與金幣。", minLevel: 4 }
+  ]);
 
   const SPRITE_PATHS = {
     mage: "assets/processed/player-mage.png",
@@ -153,7 +168,8 @@
     score: document.querySelector("#scoreText"), wall: document.querySelector("#wall"), wallHpFill: document.querySelector("#wallHpFill"),
     wallHpText: document.querySelector("#wallHpText"), repair: document.querySelector("#repairButton"),
     repairAmount: document.querySelector("#repairAmountText"), repairCost: document.querySelector("#repairCostText"), recycle: document.querySelector("#recycleButton"),
-    unlock: document.querySelector("#unlockText"), threat: document.querySelector("#threatFill"), speed: document.querySelector("#speedButton"),
+    unlock: document.querySelector("#unlockText"), threat: document.querySelector("#threatFill"), levelProgress: document.querySelector("#levelProgress"),
+    speed: document.querySelector("#speedDisplay"), speedDown: document.querySelector("#speedDownButton"), speedUp: document.querySelector("#speedUpButton"),
     pause: document.querySelector("#pauseButton"), mute: document.querySelector("#muteButton"), debug: document.querySelector("#debugButton"),
     debugMenu: document.querySelector("#debugMenu"), bgmToggle: document.querySelector("#bgmToggleButton"), collisionToggle: document.querySelector("#collisionToggleButton"),
     gridToggle: document.querySelector("#gridToggleButton"), unlockAllUnits: document.querySelector("#unlockAllUnitsButton"),
@@ -161,7 +177,8 @@
     bgm: document.querySelector("#bgmAudio"), title: document.querySelector("#titleScreen"),
     continue: document.querySelector("#continueButton"), countdown: document.querySelector("#countdownOverlay"), toast: document.querySelector("#toastLayer"),
     result: document.querySelector("#resultOverlay"), resultKicker: document.querySelector("#resultKicker"), resultTitle: document.querySelector("#resultTitle"),
-    resultSubtitle: document.querySelector("#resultSubtitle"), resultKills: document.querySelector("#resultKills"), resultTime: document.querySelector("#resultTime"),
+    resultSubtitle: document.querySelector("#resultSubtitle"), resultTip: document.querySelector("#resultTip"), resultTipText: document.querySelector("#resultTipText"),
+    resultKills: document.querySelector("#resultKills"), resultTime: document.querySelector("#resultTime"),
     restart: document.querySelector("#restartButton"), deckCoinPile: document.querySelector("#deckCoinPile"), deckCoinText: document.querySelector("#deckCoinText"),
     fullscreen: document.querySelector("#fullscreenButton"), orientationGuard: document.querySelector("#orientationGuard")
   };
@@ -197,7 +214,7 @@
       enemies: [], defenders: Array(COLS).fill(null), openSlots: Math.min(COLS, GAME_RULES.startingOpenSlots), spawnCooldown: 1.2, pendingSpawn: null, kills: 0, levelKills: 0, levelSpawned: 0,
       killScore: 0, defenseScore: 0, performanceScore: 0, wallSafeTime: 0, defenseScoreBuffer: 0, levelDamageTaken: 0,
       defenseTimeReached: false, clearPhaseElapsed: 0,
-      levelBonuses: {}, awardedLevels: [], speedIndex: 0, nextEnemyId: 1, debugAllUnitsUnlocked: false,
+      levelBonuses: {}, awardedLevels: [], shownTipIds: [], speedIndex: 0, nextEnemyId: 1, debugAllUnitsUnlocked: false,
       uiCooldown: 0, livingEnemies: 0, enemyTypeCounts: Object.create(null)
     };
   }
@@ -506,7 +523,8 @@
     els.unitLayer.innerHTML = "";
     resetVisualEffects();
     els.rangeLayer.innerHTML = "";
-    els.result.classList.remove("show");
+    els.result.classList.remove("show", "level-complete");
+    els.resultTip.hidden = true;
     els.recycle.disabled = true;
     createBoard();
     createDeck();
@@ -533,13 +551,14 @@
     els.countdown.classList.add("show");
     for (const label of labels) {
       els.countdown.textContent = label;
+      els.countdown.classList.toggle("compact-message", String(label).includes("繼續防守"));
       els.countdown.classList.remove("pop");
       void els.countdown.offsetWidth;
       els.countdown.classList.add("pop");
       sfx(/^\d$/.test(label) ? "count" : "start");
       await wait(/^\d$/.test(label) ? 760 : 900);
     }
-    els.countdown.classList.remove("show", "pop");
+    els.countdown.classList.remove("show", "pop", "compact-message");
   }
 
   function loop(now) {
@@ -725,13 +744,14 @@
     const base = ENEMY_TYPES[enemy.type];
     const combatType = base.range >= 2 ? "遠距" : "近戰";
     const combatClass = base.range >= 2 ? "ranged" : "melee";
+    const rangeText = `${enemy.range || base.range || 1}格`;
     const el = document.createElement("div");
     el.className = `game-unit enemy ${enemy.type} footprint-${enemy.footprint}`;
     el.dataset.id = enemy.id;
     el.tabIndex = 0;
     el.setAttribute("role", "button");
     el.setAttribute("aria-label", `選取${base.name}`);
-    el.innerHTML = `<div class="enemy-selection-ring" aria-hidden="true"></div><div class="body"><span class="unit-glyph">${base.glyph}</span><div class="enemy-hpbar" aria-hidden="true"><i></i></div></div><div class="unit-name-label" aria-hidden="true">${base.name}<span class="enemy-combat-label ${combatClass}">${combatType}</span></div>`;
+    el.innerHTML = `<div class="enemy-selection-ring" aria-hidden="true"></div><div class="body"><span class="unit-glyph">${base.glyph}</span><div class="enemy-hpbar" aria-hidden="true"><i></i></div></div><div class="unit-name-label" aria-hidden="true">${base.name}<span class="enemy-side-info"><span class="enemy-combat-label ${combatClass}">${combatType}</span><span class="enemy-range-label">${rangeText}</span></span></div>`;
     applySprite(el.querySelector(".body"), enemy.type);
     el.addEventListener("click", e => {
       if (enemy.dead || enemy.remove) return;
@@ -1323,16 +1343,59 @@
     if (state.ended) { clearCharacterSelection(); return; }
     if (state.defenders[col]) { selectDefender(col); return; }
     if (state.paused) { clearCharacterSelection(); return; }
+    if (selectedDefender !== null) {
+      if (col >= state.openSlots) return toast("這個塔樓位置尚未開放");
+      moveDefender(selectedDefender, col);
+      return;
+    }
     if (selectedCard) deploy(selectedCard, col);
     else clearCharacterSelection();
   }
 
-  function deploy(type, col) {
+  function nearestEmptyCorridorSlot(targetCol) {
+    const candidates = [];
+    for (let col = 0; col < state.openSlots; col++) {
+      if (!state.defenders[col]) candidates.push(col);
+    }
+    candidates.sort((a, b) => Math.abs(a - targetCol) - Math.abs(b - targetCol) || a - b);
+    return candidates[0] ?? null;
+  }
+
+  function relocateDefenderForDeployment(fromCol, toCol) {
+    const defender = state.defenders[fromCol];
+    if (!defender || state.defenders[toCol]) return null;
+    const targetSlot = els.corridor.querySelector(`[data-col="${toCol}"]`);
+    state.defenders[fromCol] = null;
+    state.defenders[toCol] = defender;
+    defender.col = toCol;
+    defender.el.dataset.col = toCol;
+    targetSlot.append(defender.el);
+    applySprite(defender.el.querySelector(".defender-body"), defender.type, toCol);
+    defender.el.animate(
+      [
+        { transform: `translateX(${toCol > fromCol ? -38 : 38}px) translateY(10px) scale(.8)`, filter: "brightness(1.8)" },
+        { transform: "translateX(0) translateY(0) scale(1)", filter: "none" }
+      ],
+      { duration: 430, easing: "cubic-bezier(.16,1,.3,1)" }
+    );
+    return defender;
+  }
+
+  function deploy(type, col, options = {}) {
     const base = PLAYER_TYPES[type];
     if (!isUnitUnlocked(type)) { sfx("deny"); return toast(unitLockLabel(type)); }
     if (col >= state.openSlots) return toast("這個塔樓位置尚未開放");
-    if (state.defenders[col]) return toast("此位置已有守軍");
+    let displacedTo = null;
+    if (state.defenders[col]) {
+      if (!options.displaceOccupied) return toast("此位置已有守軍");
+      displacedTo = nearestEmptyCorridorSlot(col);
+      if (displacedTo === null) {
+        sfx("deny");
+        return toast("該位置已滿無法佈署");
+      }
+    }
     if (state.coins < base.cost) { sfx("deny"); return toast("金幣不足"); }
+    const displacedDefender = displacedTo === null ? null : relocateDefenderForDeployment(col, displacedTo);
     state.coins -= base.cost;
     const slot = els.corridor.querySelector(`[data-col="${col}"]`);
     const el = document.createElement("div");
@@ -1351,9 +1414,19 @@
     slot.append(el);
     state.defenders[col] = { type, col, cooldown: rand(.15, .5), hp: base.hp, maxHp: base.hp, dead: false, hpHideTimer: null, el };
     selectedCard = null;
+    selectedDefender = null;
+    selectedEnemyId = null;
+    selectedWall = false;
     document.querySelectorAll(".unit-card").forEach(card => card.classList.remove("selected"));
+    document.querySelectorAll(".defender,.enemy").forEach(unit => unit.classList.remove("selected"));
+    els.wall.classList.remove("selected");
+    els.wall.setAttribute("aria-selected", "false");
+    els.recycle.disabled = true;
     showRange(null);
     if (!playDefenderDeployAudio(type)) sfx("deploy");
+    if (displacedDefender) {
+      toast(`${base.name}已部署，原守軍自動移至第 ${displacedTo + 1} 格`);
+    }
     syncUI(); syncSlots();
   }
 
@@ -1599,7 +1672,8 @@
 
   function canDropDraggedUnit(targetCol) {
     if (!drag || !Number.isInteger(targetCol) || targetCol < 0 || targetCol >= state.openSlots) return false;
-    return drag.moveExisting ? targetCol !== drag.fromCol : !state.defenders[targetCol];
+    if (drag.moveExisting) return targetCol !== drag.fromCol;
+    return !state.defenders[targetCol] || nearestEmptyCorridorSlot(targetCol) !== null;
   }
 
   function corridorDropTargetAt(clientX, clientY) {
@@ -1687,7 +1761,10 @@
         const toCol = Number(target.dataset.col);
         if (canDropDraggedUnit(toCol)) {
           if (drag.moveExisting) moveDefender(drag.fromCol, toCol);
-          else deploy(drag.type, toCol);
+          else deploy(drag.type, toCol, { displaceOccupied: true });
+        } else if (!drag.moveExisting && toCol >= 0 && toCol < state.openSlots && state.defenders[toCol]) {
+          sfx("deny");
+          toast("該位置已滿無法佈署");
         }
       }
     }
@@ -1730,12 +1807,25 @@
     }
   }
 
+  function syncWallWarning() {
+    const hpRatio = WALL_MAX_HP > 0 ? state.wallHp / WALL_MAX_HP : 0;
+    const redWarning = state.wallHp > 0 && hpRatio < WALL_WARNING_RED_RATIO;
+    const yellowWarning = state.wallHp > 0 && !redWarning && hpRatio < WALL_WARNING_YELLOW_RATIO;
+    els.wall.classList.toggle("wall-warning-yellow", yellowWarning);
+    els.wall.classList.toggle("wall-warning-red", redWarning);
+    els.wall.dataset.hpWarning = redWarning ? "critical" : yellowWarning ? "low" : "";
+  }
+
   function syncUI(force = false) {
     if (!state) return;
     const levelConfig = LEVEL_CONFIGS[state.level];
-    setTextIfChanged(els.levelLabel, state.defenseTimeReached ? "清除剩餘敵人" : `第${levelDisplayName(state.level)}關剩餘`);
+    setTextIfChanged(els.levelLabel, state.defenseTimeReached ? "清除剩餘敵人" : "剩餘時間");
+    setTextIfChanged(els.levelProgress, `${state.level} / ${TOTAL_LEVELS}關`);
     setTextIfChanged(els.timer, formatTime(Math.ceil(state.secondsLeft)));
-    setTextIfChanged(els.score, Math.floor(state.score).toLocaleString("zh-TW"));
+    const scoreValue = Math.max(0, Math.floor(state.score));
+    setTextIfChanged(els.score, scoreValue.toLocaleString("zh-TW"));
+    const scoreDigits = String(Math.min(8, String(scoreValue).length));
+    if (els.score.dataset.digits !== scoreDigits) els.score.dataset.digits = scoreDigits;
     if (els.deckCoinText) {
       const coinValue = Math.max(0, Math.floor(state.coins));
       const coinDigits = String(coinValue).length;
@@ -1746,12 +1836,15 @@
     renderDeckCoins(state.coins);
     setStyleIfChanged(els.wallHpFill, "width", `${state.wallHp / WALL_MAX_HP * 100}%`);
     setTextIfChanged(els.wallHpText, `${Math.ceil(state.wallHp)} / ${WALL_MAX_HP}`);
+    syncWallWarning();
     if (els.repairAmount) setTextIfChanged(els.repairAmount, `維修 +${WALL_CONFIG.repairAmount}`);
     if (els.repairCost) setTextIfChanged(els.repairCost, WALL_CONFIG.repairCost);
     if (els.recycle) setTextIfChanged(els.recycle, `回收 ${Math.round(GAME_RULES.recycleRefundRate * 100)}%`);
     setTextIfChanged(els.unlock, `已開放 ${state.openSlots} / ${COLS} 格`);
     setStyleIfChanged(els.threat, "width", `${(1 - state.secondsLeft / levelConfig.duration) * 100}%`);
     setTextIfChanged(els.speed, `×${SPEEDS[state.speedIndex]}`);
+    els.speedDown.disabled = state.speedIndex <= 0;
+    els.speedUp.disabled = state.speedIndex >= SPEEDS.length - 1;
     setTextIfChanged(els.pause, state.paused ? "▶" : "Ⅱ");
     Object.entries(PLAYER_TYPES).forEach(([type, def]) => {
       const card = unitCardCache.get(type);
@@ -1783,10 +1876,40 @@
     });
   }
 
+  function levelIncludesEnemy(level, enemyType) {
+    const config = LEVEL_CONFIGS[level];
+    return Number(config?.weight?.[enemyType] || 0) > 0 && Number(config?.unlock?.[enemyType] ?? 2) < 1;
+  }
+
+  function chooseIntermissionTip(nextLevel) {
+    const wallRatio = WALL_MAX_HP > 0 ? state.wallHp / WALL_MAX_HP : 0;
+    const repairTip = INTERMISSION_TIPS.find(tip => tip.lowWallOnly);
+    if (wallRatio < .5 && repairTip) return repairTip;
+
+    const eligible = INTERMISSION_TIPS.filter(tip => {
+      if (tip.lowWallOnly) return false;
+      if (tip.minLevel && nextLevel < tip.minLevel) return false;
+      if (tip.enemy && !levelIncludesEnemy(nextLevel, tip.enemy)) return false;
+      return true;
+    });
+    const fresh = eligible.filter(tip => !state.shownTipIds.includes(tip.id));
+    const pool = fresh.length ? fresh : eligible;
+    const chosen = pool[Math.floor(Math.random() * pool.length)] || INTERMISSION_TIPS[1];
+    if (!state.shownTipIds.includes(chosen.id)) state.shownTipIds.push(chosen.id);
+    return chosen;
+  }
+
+  function hideResultTip() {
+    els.result.classList.remove("level-complete");
+    els.resultTip.hidden = true;
+    els.resultTipText.textContent = "";
+  }
+
   function endGame(won) {
     if (state.ended) return;
     const performance = won ? awardLevelPerformance(state.level) : null;
     state.ended = true; state.running = false;
+    hideResultTip();
     resultAction = "restart";
     els.restart.textContent = "再玩一次";
     els.restart.disabled = false;
@@ -1807,6 +1930,7 @@
     const completedLevel = state.level;
     const nextLevel = completedLevel + 1;
     const performance = awardLevelPerformance(completedLevel);
+    const intermissionTip = chooseIntermissionTip(nextLevel);
     state.running = false;
     state.paused = true;
     resultAction = "next-level";
@@ -1816,6 +1940,9 @@
     els.resultSubtitle.textContent = `本關表現 +${performance.bonus.toLocaleString("zh-TW")}${durationHint}`;
     els.resultKills.textContent = state.kills;
     els.resultTime.textContent = formatTime(LEVEL_CONFIGS[completedLevel].duration);
+    els.result.classList.add("level-complete");
+    els.resultTipText.textContent = intermissionTip.text;
+    els.resultTip.hidden = false;
     els.restart.textContent = "繼續開始";
     els.restart.disabled = false;
     setTimeout(() => els.result.classList.add("show"), 260);
@@ -1828,6 +1955,7 @@
     const nextLevel = state.level + 1;
     els.restart.disabled = true;
     els.result.classList.remove("show");
+    hideResultTip();
     state.enemies.forEach(enemy => {
       clearTimeout(enemy.hpHideTimer);
       enemy.el?.remove();
@@ -1992,9 +2120,11 @@
     syncSystemPause();
   }
 
-  function cycleSpeed() {
+  function adjustSpeed(direction) {
     if (!state) return;
-    state.speedIndex = (state.speedIndex + 1) % SPEEDS.length;
+    const nextIndex = Math.max(0, Math.min(SPEEDS.length - 1, state.speedIndex + direction));
+    if (nextIndex === state.speedIndex) return;
+    state.speedIndex = nextIndex;
     syncUI(); sfx("click"); toast(`遊戲速度 ×${SPEEDS[state.speedIndex]}`);
   }
 
@@ -2338,7 +2468,8 @@
   els.recycle.addEventListener("click", recycleSelected);
   els.pause.addEventListener("click", togglePause);
   els.fullscreen?.addEventListener("click", toggleMobileFullscreen);
-  els.speed.addEventListener("click", cycleSpeed);
+  els.speedDown.addEventListener("click", () => adjustSpeed(-1));
+  els.speedUp.addEventListener("click", () => adjustSpeed(1));
   els.mute.addEventListener("click", toggleGlobalAudio);
   els.debug.addEventListener("click", e => { e.stopPropagation(); setDebugMenu(els.debugMenu.hidden); });
   els.debugMenu.addEventListener("click", e => e.stopPropagation());
