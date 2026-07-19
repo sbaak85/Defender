@@ -133,6 +133,18 @@
   const dragNeutralSpriteCache = new Map();
   const iconCache = new Map();
   const attackAudioPools = new Map();
+  const unitCardCache = new Map();
+  const visualPools = new Map();
+  const activeVisualCounts = new Map();
+  const audioLastPlayedAt = new Map();
+  const PERFORMANCE = Object.freeze({
+    uiInterval: .1,
+    maxPoolSize: 36,
+    audioRetriggerMs: 55,
+    desktopVisualLimits: { playerProjectile: 32, enemyProjectile: 24, impact: 18, muzzle: 12, cannon: 4, slash: 4, troll: 4, number: 24, coin: 14 },
+    lowPowerVisualLimits: { playerProjectile: 18, enemyProjectile: 12, impact: 9, muzzle: 6, cannon: 2, slash: 2, troll: 2, number: 12, coin: 8 }
+  });
+  const RAPID_SFX = new Set(["fireball", "arrow", "slash", "shell", "boom", "bolt", "hit", "wall"]);
 
   const els = {
     app: document.querySelector("#app"), board: document.querySelector("#board"), tileLayer: document.querySelector("#tileLayer"),
@@ -173,6 +185,10 @@
   let focusPauseActive = false;
   let resumeAfterSystemPause = false;
   let resultAction = "restart";
+  let enemyLayoutDirty = true;
+  let lowPowerVisualMode = false;
+  let enemyOccupancy = [];
+  let enemiesByColumn = [];
   const rangeSurfaceTiles = new Map();
 
   function initialState() {
@@ -181,8 +197,94 @@
       enemies: [], defenders: Array(COLS).fill(null), openSlots: Math.min(COLS, GAME_RULES.startingOpenSlots), spawnCooldown: 1.2, pendingSpawn: null, kills: 0, levelKills: 0, levelSpawned: 0,
       killScore: 0, defenseScore: 0, performanceScore: 0, wallSafeTime: 0, defenseScoreBuffer: 0, levelDamageTaken: 0,
       defenseTimeReached: false, clearPhaseElapsed: 0,
-      levelBonuses: {}, awardedLevels: [], speedIndex: 0, nextEnemyId: 1, debugAllUnitsUnlocked: false
+      levelBonuses: {}, awardedLevels: [], speedIndex: 0, nextEnemyId: 1, debugAllUnitsUnlocked: false,
+      uiCooldown: 0, livingEnemies: 0, enemyTypeCounts: Object.create(null)
     };
+  }
+
+  function setTextIfChanged(element, value) {
+    if (!element) return;
+    const text = String(value);
+    if (element.textContent !== text) element.textContent = text;
+  }
+
+  function setStyleIfChanged(element, property, value) {
+    if (!element) return;
+    if (element.style.getPropertyValue(property) !== value) element.style.setProperty(property, value);
+  }
+
+  function detectLowPowerVisualMode() {
+    const compactScreen = window.matchMedia("(max-width: 820px)").matches;
+    const limitedMemory = Number(navigator.deviceMemory || 8) <= 4;
+    lowPowerVisualMode = compactScreen || limitedMemory;
+    document.body.classList.toggle("low-power-effects", lowPowerVisualMode);
+  }
+
+  function visualLimit(kind) {
+    const limits = lowPowerVisualMode ? PERFORMANCE.lowPowerVisualLimits : PERFORMANCE.desktopVisualLimits;
+    return limits[kind] ?? 8;
+  }
+
+  function acquireVisual(kind, className, html = "", container = els.effectLayer) {
+    const active = activeVisualCounts.get(kind) || 0;
+    if (active >= visualLimit(kind)) return null;
+    const pool = visualPools.get(kind) || [];
+    visualPools.set(kind, pool);
+    const element = pool.pop() || document.createElement("div");
+    element.getAnimations().forEach(animation => animation.cancel());
+    element.className = className;
+    element.removeAttribute("style");
+    if (element.innerHTML !== html) element.innerHTML = html;
+    container.append(element);
+    element._visualKind = kind;
+    activeVisualCounts.set(kind, active + 1);
+    return element;
+  }
+
+  function releaseVisual(kind, element) {
+    if (!element || element._visualKind !== kind) return;
+    element._visualKind = null;
+    element.getAnimations().forEach(animation => {
+      animation.onfinish = null;
+      animation.cancel();
+    });
+    element.remove();
+    element.className = "";
+    element.removeAttribute("style");
+    activeVisualCounts.set(kind, Math.max(0, (activeVisualCounts.get(kind) || 1) - 1));
+    const pool = visualPools.get(kind) || [];
+    visualPools.set(kind, pool);
+    if (pool.length < PERFORMANCE.maxPoolSize) pool.push(element);
+  }
+
+  function resetVisualEffects() {
+    els.effectLayer.querySelectorAll("*").forEach(element => element.getAnimations().forEach(animation => animation.cancel()));
+    els.effectLayer.innerHTML = "";
+    activeVisualCounts.clear();
+  }
+
+  function resetEnemyIndexes() {
+    enemyOccupancy = Array.from({ length: ROWS }, () => Array.from({ length: COLS }, () => new Set()));
+    enemiesByColumn = Array.from({ length: COLS }, () => new Set());
+    enemyLayoutDirty = true;
+  }
+
+  function addEnemyToIndexes(enemy) {
+    for (let row = enemy.row; row < Math.min(ROWS, enemy.row + enemy.footprint); row++) {
+      for (let col = enemy.col; col < Math.min(COLS, enemy.col + enemy.footprint); col++) enemyOccupancy[row][col].add(enemy);
+    }
+    for (let col = enemy.col; col < Math.min(COLS, enemy.col + enemy.footprint); col++) enemiesByColumn[col].add(enemy);
+  }
+
+  function removeEnemyFromOccupancy(enemy, row = enemy.row, col = enemy.col) {
+    for (let y = row; y < Math.min(ROWS, row + enemy.footprint); y++) {
+      for (let x = col; x < Math.min(COLS, col + enemy.footprint); x++) enemyOccupancy[y][x].delete(enemy);
+    }
+  }
+
+  function removeEnemyFromIndexes(enemy) {
+    removeEnemyFromOccupancy(enemy);
+    for (let col = enemy.col; col < Math.min(COLS, enemy.col + enemy.footprint); col++) enemiesByColumn[col].delete(enemy);
   }
 
   function gridPoint(col, row) {
@@ -363,6 +465,7 @@
 
   function createDeck() {
     els.deck.innerHTML = "";
+    unitCardCache.clear();
     Object.entries(PLAYER_TYPES).forEach(([key, unit]) => {
       const card = document.createElement("button");
       card.type = "button";
@@ -384,6 +487,7 @@
       });
       applyIcon(card.querySelector(".card-icon"), key);
       els.deck.append(card);
+      unitCardCache.set(key, card);
     });
   }
 
@@ -395,16 +499,18 @@
     selectedDefender = null;
     selectedEnemyId = null;
     selectedWall = false;
+    resetEnemyIndexes();
+    detectLowPowerVisualMode();
     els.wall.classList.remove("selected");
     els.wall.setAttribute("aria-selected", "false");
     els.unitLayer.innerHTML = "";
-    els.effectLayer.innerHTML = "";
+    resetVisualEffects();
     els.rangeLayer.innerHTML = "";
     els.result.classList.remove("show");
     els.recycle.disabled = true;
     createBoard();
     createDeck();
-    syncUI();
+    syncUI(true);
   }
 
   async function beginGame() {
@@ -464,7 +570,7 @@
       state.spawnCooldown -= dt;
       const spawnInterval = lerp(levelConfig.spawnStart, levelConfig.spawnEnd, Math.pow(progress, .68));
       if (state.spawnCooldown <= 0) {
-        const canAddEnemy = state.enemies.filter(e => !e.dead).length < GAME_RULES.maxActiveEnemies;
+        const canAddEnemy = state.livingEnemies < GAME_RULES.maxActiveEnemies;
         const spawned = canAddEnemy && spawnEnemy(progress);
         if (spawned) state.spawnCooldown += spawnInterval * rand(.78, 1.24);
         else state.spawnCooldown = .12;
@@ -477,13 +583,17 @@
     for (let col = 0; col < COLS; col++) if (state.defenders[col]) updateDefender(state.defenders[col], dt);
     state.enemies = state.enemies.filter(e => !e.remove);
 
-    const hasLivingEnemies = state.enemies.some(enemy => !enemy.dead && !enemy.remove);
+    const hasLivingEnemies = state.livingEnemies > 0;
     if (state.wallHp <= 0) endGame(false);
     else if (state.defenseTimeReached && !hasLivingEnemies && state.clearPhaseElapsed >= 1.4) {
       if (state.level < Object.keys(LEVEL_CONFIGS).length) completeLevel();
       else endGame(true);
     }
-    syncUI();
+    state.uiCooldown -= dt;
+    if (state.uiCooldown <= 0) {
+      state.uiCooldown += PERFORMANCE.uiInterval;
+      syncUI();
+    }
   }
 
   function updateSafeDefenseScore(dt) {
@@ -532,13 +642,20 @@
     // Every enemy may merge into the wall crowd only on the step that reaches the wall.
     if (enemy.canOverlapAtWall && enemyTouchesWallAt(enemy, targetRow)) return true;
 
-    return !state.enemies.some(other => {
-      if (other === enemy || other.dead || other.remove) return false;
+    const occupants = new Set();
+    for (let row = targetRow; row < targetRow + enemy.footprint; row++) {
+      for (let col = targetCol; col < targetCol + enemy.footprint; col++) {
+        enemyOccupancy[row][col].forEach(other => occupants.add(other));
+      }
+    }
+    for (const other of occupants) {
+      if (other === enemy || other.dead || other.remove) continue;
       // A ranged enemy that has stopped to attack no longer blocks the lane.
       // Moving enemies may pass through it and continue toward the wall.
-      if (isStationaryRangedAttacker(other)) return false;
-      return footprintsOverlap(targetCol, targetRow, enemy.footprint, other.col, other.row, other.footprint);
-    });
+      if (isStationaryRangedAttacker(other)) continue;
+      if (footprintsOverlap(targetCol, targetRow, enemy.footprint, other.col, other.row, other.footprint)) return false;
+    }
+    return true;
   }
 
   function spawnEnemy(progress) {
@@ -548,7 +665,7 @@
       if (progress < config.openingGoblinOnly) unlocked = ["goblin"];
       unlocked = unlocked.filter(type => {
         const cap = config.activeCaps[type];
-        return !cap || state.enemies.filter(enemy => !enemy.dead && enemy.type === type).length < cap;
+        return !cap || (state.enemyTypeCounts[type] || 0) < cap;
       });
       if (!unlocked.length) unlocked = ["goblin"];
       const type = weightedChoice(unlocked, typeKey => config.weight[typeKey]);
@@ -586,12 +703,17 @@
       footprint,
       splashColumns: Math.max(1, base.splashArea?.columns || footprint),
       canOverlapAtWall: base.canOverlapAtWall,
-      dead: false, remove: false, tier, el: null
+      dead: false, remove: false, tier, el: null, hpFill: null, hpDirty: true
     };
     state.pendingSpawn = null;
     enemy.el = makeEnemyElement(enemy);
+    enemy.hpFill = enemy.el.querySelector(".enemy-hpbar i");
     state.enemies.push(enemy);
+    state.livingEnemies++;
+    state.enemyTypeCounts[type] = (state.enemyTypeCounts[type] || 0) + 1;
     state.levelSpawned++;
+    addEnemyToIndexes(enemy);
+    enemyLayoutDirty = true;
     els.unitLayer.append(enemy.el);
     placeOnGrid(enemy.el, enemy.col, enemy.row, footprint, footprint);
     setEnemyDepthScale(enemy);
@@ -669,13 +791,11 @@
   }
 
   function enemyMagicImpactAt(x, y, type) {
-    const fx = document.createElement("div");
-    fx.className = `enemy-magic-impact ${type}`;
+    const fx = acquireVisual("impact", `enemy-magic-impact ${type}`, `<i></i><b></b><span></span>`);
+    if (!fx) return;
     fx.style.left = `${x}px`;
     fx.style.top = `${y}px`;
-    fx.innerHTML = `<i></i><b></b><span></span>`;
-    els.effectLayer.append(fx);
-    setTimeout(() => fx.remove(), 620);
+    setTimeout(() => releaseVisual("impact", fx), 620);
   }
 
   function launchEnemyMagicProjectile(enemy, onHit) {
@@ -684,21 +804,22 @@
     const deltaX = to.x - from.x;
     const deltaY = to.y - from.y;
     const flightAngle = Math.atan2(deltaY, deltaX) * 180 / Math.PI;
-    const projectile = document.createElement("div");
-    projectile.className = `enemy-magic-projectile ${enemy.type}`;
+    const distance = Math.hypot(deltaX, deltaY);
+    const duration = Math.max(240, (210 + distance * .48) / SPEEDS[state.speedIndex]);
+    const projectile = acquireVisual("enemyProjectile", `enemy-magic-projectile ${enemy.type}`, `<i aria-hidden="true"></i>`);
+    if (!projectile) {
+      setTimeout(onHit, duration);
+      return;
+    }
     projectile.style.left = `${from.x}px`;
     projectile.style.top = `${from.y}px`;
     projectile.style.setProperty("--enemy-flight-angle", `${flightAngle}deg`);
-    projectile.innerHTML = `<i aria-hidden="true"></i>`;
-    els.effectLayer.append(projectile);
-    const distance = Math.hypot(deltaX, deltaY);
-    const duration = Math.max(240, (210 + distance * .48) / SPEEDS[state.speedIndex]);
     const animation = projectile.animate(
       [{ transform: "translate(0,0) scale(.72)" }, { transform: `translate(${deltaX}px,${deltaY}px) scale(1.08)` }],
       { duration, easing: "cubic-bezier(.28,.48,.38,1)" }
     );
     animation.onfinish = () => {
-      projectile.remove();
+      releaseVisual("enemyProjectile", projectile);
       enemyMagicImpactAt(to.x, to.y, enemy.type);
       onHit();
     };
@@ -710,21 +831,22 @@
     const deltaX = to.x - from.x;
     const deltaY = to.y - from.y;
     const flightAngle = Math.atan2(deltaY, deltaX) * 180 / Math.PI;
-    const projectile = document.createElement("div");
-    projectile.className = "enemy-spear-projectile";
+    const distance = Math.hypot(deltaX, deltaY);
+    const duration = Math.max(210, (190 + distance * .42) / SPEEDS[state.speedIndex]);
+    const projectile = acquireVisual("enemyProjectile", "enemy-spear-projectile", `<i aria-hidden="true"></i>`);
+    if (!projectile) {
+      setTimeout(onHit, duration);
+      return;
+    }
     projectile.style.left = `${from.x}px`;
     projectile.style.top = `${from.y}px`;
     projectile.style.setProperty("--enemy-flight-angle", `${flightAngle}deg`);
-    projectile.innerHTML = `<i aria-hidden="true"></i>`;
-    els.effectLayer.append(projectile);
-    const distance = Math.hypot(deltaX, deltaY);
-    const duration = Math.max(210, (190 + distance * .42) / SPEEDS[state.speedIndex]);
     const animation = projectile.animate(
       [{ transform: "translate(0,0)" }, { transform: `translate(${deltaX}px,${deltaY}px)` }],
       { duration, easing: "linear" }
     );
     animation.onfinish = () => {
-      projectile.remove();
+      releaseVisual("enemyProjectile", projectile);
       enemyMagicImpactAt(to.x, to.y, "lizard");
       onHit();
     };
@@ -735,18 +857,19 @@
     const to = enemyWallImpactPoint(enemy);
     const row = Math.min(ROWS - 1, enemyFrontRow(enemy));
     const cellWidth = Math.abs(gridPoint(enemy.col + 1, row).x - gridPoint(enemy.col, row).x) * els.board.clientWidth;
-    const fx = document.createElement("div");
     const duration = Math.max(250, 520 / SPEEDS[state.speedIndex]);
-    fx.className = "enemy-troll-sweep";
+    const fx = acquireVisual("troll", "enemy-troll-sweep", `<svg viewBox="0 0 260 170" preserveAspectRatio="none" aria-hidden="true"><path class="troll-sweep-glow" pathLength="1" d="M 12 10 C 22 158 238 158 248 10"/><path class="troll-sweep-edge" pathLength="1" d="M 12 10 C 22 158 238 158 248 10"/><path class="troll-sweep-inner" pathLength="1" d="M 34 14 C 46 133 214 133 226 14"/></svg>`);
+    if (!fx) {
+      setTimeout(onHit, duration * .58);
+      return;
+    }
     fx.style.left = `${from.x}px`;
     fx.style.top = `${from.y}px`;
     fx.style.width = `${Math.max(118, cellWidth * 2.25)}px`;
     fx.style.height = `${Math.max(88, to.y - from.y + 12)}px`;
     fx.style.setProperty("--troll-sweep-duration", `${duration}ms`);
-    fx.innerHTML = `<svg viewBox="0 0 260 170" preserveAspectRatio="none" aria-hidden="true"><path class="troll-sweep-glow" pathLength="1" d="M 12 10 C 22 158 238 158 248 10"/><path class="troll-sweep-edge" pathLength="1" d="M 12 10 C 22 158 238 158 248 10"/><path class="troll-sweep-inner" pathLength="1" d="M 34 14 C 46 133 214 133 226 14"/></svg>`;
-    els.effectLayer.append(fx);
     setTimeout(onHit, duration * .58);
-    setTimeout(() => fx.remove(), duration + 90);
+    setTimeout(() => releaseVisual("troll", fx), duration + 90);
   }
 
   function updateEnemy(enemy, dt) {
@@ -765,7 +888,10 @@
           enemy.moveCooldown = Math.min(.4, Math.max(.12, ENEMY_TYPES[enemy.type].moveEvery * .18));
           return;
         }
+        removeEnemyFromOccupancy(enemy);
         enemy.row = nextRow;
+        addEnemyToIndexes(enemy);
+        enemyLayoutDirty = true;
         enemy.moveCooldown += ENEMY_TYPES[enemy.type].moveEvery;
         enemy.el?.animate([{ filter: "brightness(1.45)", scale: "1.08" }, { filter: "none", scale: "1" }], { duration: 300 / SPEEDS[state.speedIndex], easing: "ease-out" });
       }
@@ -797,22 +923,29 @@
 
   function renderEnemies() {
     if (!state) return;
+    const hasHpChanges = state.enemies.some(enemy => enemy.hpDirty);
+    if (!enemyLayoutDirty && !hasHpChanges) return;
     const stacks = new Map();
     for (const enemy of state.enemies) {
       if (enemy.remove || !enemy.el) continue;
-      const key = `${enemy.col}-${enemy.row}-${enemy.footprint}`;
-      const index = stacks.get(key) || 0;
-      stacks.set(key, index + 1);
-      const offsets = [[0,0],[-12,4],[12,7],[-7,-6],[9,-8]];
-      const [ox, oy] = offsets[index % offsets.length];
-      placeOnGrid(enemy.el, enemy.col, enemy.row, enemy.footprint, enemy.footprint);
-      setEnemyDepthScale(enemy);
-      enemy.el.style.setProperty("--row", enemyFrontRow(enemy));
-      enemy.el.style.setProperty("--stack-x", `${ox}%`);
-      enemy.el.style.setProperty("--stack-y", `${oy}%`);
-      const fill = enemy.el.querySelector(".enemy-hpbar i");
-      if (fill) fill.style.width = `${Math.max(0, enemy.hp / enemy.maxHp * 100)}%`;
+      if (enemyLayoutDirty) {
+        const key = `${enemy.col}-${enemy.row}-${enemy.footprint}`;
+        const index = stacks.get(key) || 0;
+        stacks.set(key, index + 1);
+        const offsets = [[0,0],[-12,4],[12,7],[-7,-6],[9,-8]];
+        const [ox, oy] = offsets[index % offsets.length];
+        placeOnGrid(enemy.el, enemy.col, enemy.row, enemy.footprint, enemy.footprint);
+        setEnemyDepthScale(enemy);
+        setStyleIfChanged(enemy.el, "--row", String(enemyFrontRow(enemy)));
+        setStyleIfChanged(enemy.el, "--stack-x", `${ox}%`);
+        setStyleIfChanged(enemy.el, "--stack-y", `${oy}%`);
+      }
+      if (enemy.hpDirty && enemy.hpFill) {
+        setStyleIfChanged(enemy.hpFill, "width", `${Math.max(0, enemy.hp / enemy.maxHp * 100)}%`);
+        enemy.hpDirty = false;
+      }
     }
+    enemyLayoutDirty = false;
   }
 
   function setEnemyDepthScale(enemy) {
@@ -863,22 +996,27 @@
   }
 
   function findTargets(col, def) {
-    let candidates = state.enemies.filter(e => !e.dead && ROWS - enemyFrontRow(e) <= def.range);
     const splashColumns = Math.max(1, def.splashArea?.columns || 1);
     const leftReach = Math.floor((splashColumns - 1) / 2);
     const rightReach = splashColumns - 1 - leftReach;
-    if (def.attack === "slash") candidates = candidates.filter(e => enemyOverlapsColumns(e, col - leftReach, col + rightReach));
+    const collectColumns = (minCol, maxCol) => {
+      const found = new Set();
+      for (let lane = Math.max(0, minCol); lane <= Math.min(COLS - 1, maxCol); lane++) {
+        enemiesByColumn[lane].forEach(enemy => found.add(enemy));
+      }
+      return [...found].filter(enemy => !enemy.dead && !enemy.remove && ROWS - enemyFrontRow(enemy) <= def.range);
+    };
+    let candidates;
+    if (def.attack === "slash") candidates = collectColumns(col - leftReach, col + rightReach).filter(e => enemyOverlapsColumns(e, col - leftReach, col + rightReach));
     else if (def.attack === "shell") {
-      const same = candidates.filter(e => enemyCoversCol(e, col));
-      candidates = same.length ? same : candidates.filter(e => enemyOverlapsColumns(e, col - leftReach, col + rightReach));
-    } else candidates = candidates.filter(e => enemyCoversCol(e, col));
+      const same = collectColumns(col, col).filter(e => enemyCoversCol(e, col));
+      candidates = same.length ? same : collectColumns(col - leftReach, col + rightReach).filter(e => enemyOverlapsColumns(e, col - leftReach, col + rightReach));
+    } else candidates = collectColumns(col, col).filter(e => enemyCoversCol(e, col));
     return candidates.sort((a, b) => enemyFrontRow(b) - enemyFrontRow(a));
   }
 
   function slashAttack(defender, targets, def) {
-    const fx = document.createElement("div");
-    fx.className = "slash-sweep";
-    fx.innerHTML = `<svg viewBox="0 0 300 180" preserveAspectRatio="none" aria-hidden="true">
+    const slashMarkup = `<svg viewBox="0 0 300 180" preserveAspectRatio="none" aria-hidden="true">
       <defs>
         <linearGradient id="warriorSlashGradient" x1="0" y1="0" x2="1" y2="0">
           <stop offset="0" stop-color="#ff8b28" stop-opacity="0"/>
@@ -892,35 +1030,32 @@
       <path class="slash-edge" pathLength="1" d="M 12 170 C 26 -46 274 -46 288 170"/>
       <path class="slash-inner" pathLength="1" d="M 34 171 C 54 -8 246 -8 266 171"/>
     </svg>`;
+    const fx = acquireVisual("slash", "slash-sweep", slashMarkup);
     const splashColumns = Math.max(1, def.splashArea?.columns || 1);
     const splashRows = Math.max(1, def.splashArea?.rows || 1);
     const leftReach = Math.floor((splashColumns - 1) / 2);
     const rightReach = splashColumns - 1 - leftReach;
     const minCol = Math.max(0, defender.col - leftReach);
     const maxCol = Math.min(COLS - 1, defender.col + rightReach);
-    placeOnGrid(fx, minCol, Math.max(0, ROWS - splashRows), maxCol - minCol + 1, splashRows, true);
-    els.effectLayer.append(fx);
-    setTimeout(() => fx.remove(), 680);
+    if (fx) {
+      placeOnGrid(fx, minCol, Math.max(0, ROWS - splashRows), maxCol - minCol + 1, splashRows, true);
+      setTimeout(() => releaseVisual("slash", fx), 680);
+    }
     targets.forEach((target, index) => damageEnemy(target, def.splashDamage || def.damage, defender.type, index === 0));
   }
 
   function muzzleFlashAt(x, y, kind, angle) {
     if (kind !== "shell" && kind !== "bolt") return;
-    const fx = document.createElement("div");
-    fx.className = `muzzle-flash ${kind}`;
+    const fx = acquireVisual("muzzle", `muzzle-flash ${kind}`, `<i class="muzzle-cone"></i><i class="muzzle-core"></i><i class="muzzle-ring"></i><i class="muzzle-sparks"></i>`);
+    if (!fx) return;
     fx.style.left = `${x}px`;
     fx.style.top = `${y}px`;
     fx.style.setProperty("--muzzle-angle", `${angle}deg`);
-    fx.innerHTML = `<i class="muzzle-cone"></i><i class="muzzle-core"></i><i class="muzzle-ring"></i><i class="muzzle-sparks"></i>`;
-    els.effectLayer.append(fx);
-    setTimeout(() => fx.remove(), kind === "shell" ? 420 : 260);
+    setTimeout(() => releaseVisual("muzzle", fx), kind === "shell" ? 420 : 260);
   }
 
   function launchProjectile(defender, enemy, kind, onHit) {
     if (!enemy || enemy.dead) return;
-    const p = document.createElement("div");
-    p.className = `projectile ${kind}`;
-    p.innerHTML = `<i aria-hidden="true"></i>`;
     // Projectile origin is visual only. Anchor every corridor slot to the same
     // perspective row so the two outer launchers follow the painted grid axis
     // instead of using a flat, equally-spaced screen coordinate.
@@ -945,22 +1080,29 @@
     const muzzleY = fromY + Math.sin(flightRadians) * muzzleForwardDistance;
     const deltaX = toX - muzzleX;
     const deltaY = toY - muzzleY;
+    const distance = Math.hypot(deltaX, deltaY);
+    const duration = Math.max(80, (180 + distance * .55) / SPEEDS[state.speedIndex]);
+    const finishProjectile = () => {
+      if (!state.ended) onHit();
+      if (kind === "shell") cannonExplosionAt(toX, toY);
+      else impactAt(toX, toY, kind === "fireball" ? "#ff7c2e" : "#6ffff0");
+    };
+    muzzleFlashAt(muzzleX, muzzleY, kind, flightAngle);
+    const p = acquireVisual("playerProjectile", `projectile ${kind}`, `<i aria-hidden="true"></i>`);
+    if (!p) {
+      setTimeout(finishProjectile, duration);
+      return;
+    }
     p.style.left = `${muzzleX}px`;
     p.style.top = `${muzzleY}px`;
     p.style.setProperty("--flight-angle", `${flightAngle}deg`);
-    muzzleFlashAt(muzzleX, muzzleY, kind, flightAngle);
-    els.effectLayer.append(p);
-    const distance = Math.hypot(deltaX, deltaY);
-    const duration = Math.max(80, (180 + distance * .55) / SPEEDS[state.speedIndex]);
     const anim = p.animate(
       [{ transform: "translate(0,0)" }, { transform: `translate(${deltaX}px,${deltaY}px)` }],
       { duration, easing: kind === "shell" ? "cubic-bezier(.2,.7,.35,1)" : "linear" }
     );
     anim.onfinish = () => {
-      p.remove();
-      if (!state.ended) onHit();
-      if (kind === "shell") cannonExplosionAt(toX, toY);
-      else impactAt(toX, toY, kind === "fireball" ? "#ff7c2e" : "#6ffff0");
+      releaseVisual("playerProjectile", p);
+      finishProjectile();
     };
   }
 
@@ -981,34 +1123,33 @@
   }
 
   function impactAt(x, y, color) {
-    const fx = document.createElement("div");
-    fx.className = "impact";
+    const fx = acquireVisual("impact", "impact");
+    if (!fx) return;
     fx.style.left = `${x}px`; fx.style.top = `${y}px`; fx.style.setProperty("--impact", color);
-    els.effectLayer.append(fx);
-    setTimeout(() => fx.remove(), 470);
+    setTimeout(() => releaseVisual("impact", fx), 470);
   }
 
   function cannonExplosionAt(x, y) {
-    const fx = document.createElement("div");
     const blastSize = Math.max(220, Math.min(320, els.board.clientWidth / COLS * 2.75));
-    fx.className = "cannon-impact";
-    fx.style.left = `${x}px`;
-    fx.style.top = `${y}px`;
-    fx.style.setProperty("--cannon-blast-size", `${blastSize}px`);
-    const debris = Array.from({ length: 14 }, (_, index) => {
-      const angle = index * (360 / 14) + (index % 2 ? 6 : -3);
+    const debrisCount = lowPowerVisualMode ? 6 : 14;
+    const debris = Array.from({ length: debrisCount }, (_, index) => {
+      const angle = index * (360 / debrisCount) + (index % 2 ? 6 : -3);
       const distance = -(18 + index % 5 * 6);
       const delay = (index % 4) * 18;
       return `<b style="--debris-angle:${angle}deg;--debris-distance:${distance}%;--debris-delay:${delay}ms"></b>`;
     }).join("");
-    fx.innerHTML = `<i class="cannon-scorch"></i><i class="cannon-blast-cloud"></i><i class="cannon-blast-core"></i><i class="cannon-shockwave secondary"></i><i class="cannon-shockwave"></i><i class="cannon-debris">${debris}</i>`;
-    els.effectLayer.append(fx);
-    setTimeout(() => fx.remove(), 1250);
+    const fx = acquireVisual("cannon", "cannon-impact", `<i class="cannon-scorch"></i><i class="cannon-blast-cloud"></i><i class="cannon-blast-core"></i><i class="cannon-shockwave secondary"></i><i class="cannon-shockwave"></i><i class="cannon-debris">${debris}</i>`);
+    if (!fx) return;
+    fx.style.left = `${x}px`;
+    fx.style.top = `${y}px`;
+    fx.style.setProperty("--cannon-blast-size", `${blastSize}px`);
+    setTimeout(() => releaseVisual("cannon", fx), 1250);
   }
 
   function damageEnemy(enemy, amount, sourceType = null, playHitAudio = true) {
     if (!enemy || enemy.dead) return;
     enemy.hp -= amount;
+    enemy.hpDirty = true;
     showEnemyHp(enemy);
     enemy.el.classList.add("hit");
     setTimeout(() => enemy.el?.classList.remove("hit"), 250);
@@ -1031,6 +1172,10 @@
   function killEnemy(enemy) {
     if (enemy.dead) return;
     enemy.dead = true;
+    removeEnemyFromIndexes(enemy);
+    state.livingEnemies = Math.max(0, state.livingEnemies - 1);
+    state.enemyTypeCounts[enemy.type] = Math.max(0, (state.enemyTypeCounts[enemy.type] || 1) - 1);
+    enemyLayoutDirty = true;
     if (selectedEnemyId === enemy.id) selectedEnemyId = null;
     enemy.el.classList.remove("selected");
     state.kills++;
@@ -1050,6 +1195,7 @@
       clearTimeout(enemy.hpHideTimer);
       enemy.remove = true;
       enemy.el?.remove();
+      enemyLayoutDirty = true;
     }, GAME_RULES.enemyDeathFadeSeconds * 1000);
   }
 
@@ -1121,22 +1267,25 @@
     const point = gridPoint(col + .5, row + .3);
     const x = point.x * els.board.clientWidth;
     const y = point.y * els.board.clientHeight;
-    const n = document.createElement("div");
-    n.className = "damage-number"; n.textContent = `-${amount}`; n.style.left = `${x}px`; n.style.top = `${y}px`;
-    els.effectLayer.append(n); setTimeout(() => n.remove(), 900);
+    const n = acquireVisual("number", "damage-number");
+    if (!n) return;
+    n.textContent = `-${amount}`; n.style.left = `${x}px`; n.style.top = `${y}px`;
+    setTimeout(() => releaseVisual("number", n), 900);
   }
 
   function screenDamageNumber(x, y, amount) {
-    const n = document.createElement("div");
-    n.className = "damage-number"; n.textContent = `-${amount}`; n.style.position = "fixed"; n.style.left = `${x}px`; n.style.top = `${y}px`;
-    document.body.append(n); setTimeout(() => n.remove(), 900);
+    const n = acquireVisual("number", "damage-number", "", document.body);
+    if (!n) return;
+    n.textContent = `-${amount}`; n.style.position = "fixed"; n.style.left = `${x}px`; n.style.top = `${y}px`;
+    setTimeout(() => releaseVisual("number", n), 900);
   }
 
   function coinPop(col, row, amount) {
     const point = gridPoint(col + .25, row + .3);
-    const n = document.createElement("div");
-    n.className = "coin-pop"; n.textContent = `◆ +${amount}`; n.style.left = `${point.x * 100}%`; n.style.top = `${point.y * 100}%`;
-    els.effectLayer.append(n); setTimeout(() => n.remove(), 1050);
+    const n = acquireVisual("coin", "coin-pop");
+    if (!n) return;
+    n.textContent = `◆ +${amount}`; n.style.left = `${point.x * 100}%`; n.style.top = `${point.y * 100}%`;
+    setTimeout(() => releaseVisual("coin", n), 1050);
   }
 
   function isUnitUnlocked(type) {
@@ -1581,30 +1730,31 @@
     }
   }
 
-  function syncUI() {
+  function syncUI(force = false) {
     if (!state) return;
     const levelConfig = LEVEL_CONFIGS[state.level];
-    els.levelLabel.textContent = state.defenseTimeReached ? "清除剩餘敵人" : `第${levelDisplayName(state.level)}關剩餘`;
-    els.timer.textContent = formatTime(Math.ceil(state.secondsLeft));
-    els.score.textContent = Math.floor(state.score).toLocaleString("zh-TW");
+    setTextIfChanged(els.levelLabel, state.defenseTimeReached ? "清除剩餘敵人" : `第${levelDisplayName(state.level)}關剩餘`);
+    setTextIfChanged(els.timer, formatTime(Math.ceil(state.secondsLeft)));
+    setTextIfChanged(els.score, Math.floor(state.score).toLocaleString("zh-TW"));
     if (els.deckCoinText) {
       const coinValue = Math.max(0, Math.floor(state.coins));
       const coinDigits = String(coinValue).length;
-      els.deckCoinText.textContent = coinValue;
-      els.deckCoinText.dataset.digits = String(Math.min(6, coinDigits));
+      setTextIfChanged(els.deckCoinText, coinValue);
+      const digits = String(Math.min(6, coinDigits));
+      if (els.deckCoinText.dataset.digits !== digits) els.deckCoinText.dataset.digits = digits;
     }
     renderDeckCoins(state.coins);
-    els.wallHpFill.style.width = `${state.wallHp / WALL_MAX_HP * 100}%`;
-    els.wallHpText.textContent = `${Math.ceil(state.wallHp)} / ${WALL_MAX_HP}`;
-    if (els.repairAmount) els.repairAmount.textContent = `維修 +${WALL_CONFIG.repairAmount}`;
-    if (els.repairCost) els.repairCost.textContent = `${WALL_CONFIG.repairCost}`;
-    if (els.recycle) els.recycle.textContent = `回收 ${Math.round(GAME_RULES.recycleRefundRate * 100)}%`;
-    els.unlock.textContent = `已開放 ${state.openSlots} / ${COLS} 格`;
-    els.threat.style.width = `${(1 - state.secondsLeft / levelConfig.duration) * 100}%`;
-    els.speed.textContent = `×${SPEEDS[state.speedIndex]}`;
-    els.pause.textContent = state.paused ? "▶" : "Ⅱ";
+    setStyleIfChanged(els.wallHpFill, "width", `${state.wallHp / WALL_MAX_HP * 100}%`);
+    setTextIfChanged(els.wallHpText, `${Math.ceil(state.wallHp)} / ${WALL_MAX_HP}`);
+    if (els.repairAmount) setTextIfChanged(els.repairAmount, `維修 +${WALL_CONFIG.repairAmount}`);
+    if (els.repairCost) setTextIfChanged(els.repairCost, WALL_CONFIG.repairCost);
+    if (els.recycle) setTextIfChanged(els.recycle, `回收 ${Math.round(GAME_RULES.recycleRefundRate * 100)}%`);
+    setTextIfChanged(els.unlock, `已開放 ${state.openSlots} / ${COLS} 格`);
+    setStyleIfChanged(els.threat, "width", `${(1 - state.secondsLeft / levelConfig.duration) * 100}%`);
+    setTextIfChanged(els.speed, `×${SPEEDS[state.speedIndex]}`);
+    setTextIfChanged(els.pause, state.paused ? "▶" : "Ⅱ");
     Object.entries(PLAYER_TYPES).forEach(([type, def]) => {
-      const card = els.deck.querySelector(`[data-type="${type}"]`);
+      const card = unitCardCache.get(type);
       if (!card) return;
       const unlocked = isUnitUnlocked(type);
       card.classList.toggle("unit-locked", !unlocked);
@@ -1618,11 +1768,14 @@
       els.unlockAllUnits.classList.toggle("is-on", state.debugAllUnitsUnlocked);
       els.unlockAllUnits.classList.toggle("is-off", !state.debugAllUnitsUnlocked);
     }
-    syncSlots();
+    syncSlots(force);
   }
 
-  function syncSlots() {
+  function syncSlots(force = false) {
     if (!state) return;
+    const signature = String(state.openSlots);
+    if (!force && els.corridor.dataset.slotSignature === signature) return;
+    els.corridor.dataset.slotSignature = signature;
     els.corridor.querySelectorAll(".corridor-slot").forEach(slot => {
       const col = Number(slot.dataset.col);
       slot.classList.toggle("locked", col >= state.openSlots);
@@ -1680,6 +1833,10 @@
       enemy.el?.remove();
     });
     state.enemies = [];
+    state.livingEnemies = 0;
+    state.enemyTypeCounts = Object.create(null);
+    resetEnemyIndexes();
+    resetVisualEffects();
     state.pendingSpawn = null;
     state.level = nextLevel;
     state.secondsLeft = LEVEL_CONFIGS[nextLevel].duration;
@@ -1880,16 +2037,18 @@
 
   function playAttackSample(sample) {
     if (muted || !sample) return;
+    const now = performance.now();
+    const lastPlayed = audioLastPlayedAt.get(sample.path) || -Infinity;
+    if (now - lastPlayed < PERFORMANCE.audioRetriggerMs) return;
     const pool = ensureAttackAudioPool(sample.path);
     let sound = pool.sounds.find(candidate => candidate.paused || candidate.ended);
-    if (!sound && pool.sounds.length < 8) {
+    const maxVoices = lowPowerVisualMode ? 3 : 5;
+    if (!sound && pool.sounds.length < maxVoices) {
       sound = createAttackAudio(sample.path);
       pool.sounds.push(sound);
     }
-    if (!sound) {
-      sound = pool.sounds[pool.cursor++ % pool.sounds.length];
-      sound.pause();
-    }
+    if (!sound) return;
+    audioLastPlayedAt.set(sample.path, now);
     sound.currentTime = 0;
     sound.volume = Math.max(0, Math.min(1, sample.volume ?? 1));
     sound.play()?.catch(() => {});
@@ -2140,6 +2299,11 @@
 
   function sfx(kind) {
     if (!audio || muted) return;
+    const cooldown = RAPID_SFX.has(kind) ? (kind === "boom" ? 90 : 45) : 0;
+    const key = `sfx:${kind}`;
+    const now = performance.now();
+    if (cooldown && now - (audioLastPlayedAt.get(key) || -Infinity) < cooldown) return;
+    if (cooldown) audioLastPlayedAt.set(key, now);
     const table = {
       click:()=>tone(520,.06,"triangle",.035,80), count:()=>tone(240,.16,"square",.055,80), start:()=>{tone(280,.3,"sawtooth",.04,500);setTimeout(()=>tone(560,.32,"triangle",.05,500),100)},
       deploy:()=>{tone(180,.12,"triangle",.05,220);setTimeout(()=>tone(440,.18,"sine",.045,180),70)}, unlock:()=>{[420,560,740].forEach((f,i)=>setTimeout(()=>tone(f,.18,"sine",.04,110),i*80))},
@@ -2210,8 +2374,8 @@
   window.addEventListener("focus", syncPageFocus);
   document.addEventListener("fullscreenchange", syncFullscreenUI);
   document.addEventListener("webkitfullscreenchange", syncFullscreenUI);
-  window.addEventListener("orientationchange", () => setTimeout(syncOrientationGuard, 80));
-  window.addEventListener("resize", syncOrientationGuard, { passive: true });
+  window.addEventListener("orientationchange", () => setTimeout(() => { syncOrientationGuard(); detectLowPowerVisualMode(); }, 80));
+  window.addEventListener("resize", () => { syncOrientationGuard(); detectLowPowerVisualMode(); }, { passive: true });
 
   resetGame();
   syncAudioUI();

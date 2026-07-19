@@ -155,7 +155,7 @@ button { font: inherit; }
 .game-unit {
   position:absolute; left:0; top:0; width:calc(100% / 6); height:calc(100% / 8); display:flex; align-items:center; justify-content:center;
   transform:none; transition:left .42s cubic-bezier(.2,.85,.22,1),top .42s cubic-bezier(.2,.85,.22,1),width .42s cubic-bezier(.2,.85,.22,1),height .42s cubic-bezier(.2,.85,.22,1),transform .2s ease,filter .16s ease,opacity .45s ease;
-  pointer-events:auto; will-change:left,top,width,height,transform;
+  pointer-events:auto;
 }
 .game-unit.footprint-2 { width:33.333333%; height:22.222222%; }
 .unit-layer.show-collision .game-unit::before {
@@ -1992,6 +1992,32 @@ body {
 .orientation-phone { display:grid;place-items:center;width:43px;height:68px;border:3px solid #e6bf71;border-radius:8px;font-size:0;animation:phoneTurn 1.5s ease-in-out infinite; }
 .orientation-phone::after { content:"";width:5px;height:5px;border-radius:50%;background:#e6bf71;align-self:end;margin-bottom:4px; }
 @keyframes phoneTurn { 0%,25%{transform:rotate(90deg)}65%,100%{transform:rotate(0)} }
+
+/* Mobile and low-memory devices retain gameplay timing while reducing costly
+   off-screen filters, continuously animated layers, and secondary particles. */
+body.low-power-effects .game-unit .body,
+body.low-power-effects .defender .defender-body { animation:none; }
+body.low-power-effects .game-unit .body.has-sprite,
+body.low-power-effects .defender .defender-body.has-sprite {
+  filter:drop-shadow(0 5px 4px rgba(0,0,0,.72));
+}
+body.low-power-effects .enemy-magic-projectile > i {
+  animation:none;
+  box-shadow:0 0 7px var(--enemy-orb-core),0 0 15px var(--enemy-orb-edge);
+}
+body.low-power-effects .enemy-magic-projectile > i::before,
+body.low-power-effects .enemy-magic-impact > span,
+body.low-power-effects .muzzle-flash .muzzle-sparks,
+body.low-power-effects .muzzle-flash .muzzle-ring,
+body.low-power-effects .cannon-shockwave.secondary { display:none; }
+body.low-power-effects .enemy-magic-impact { mix-blend-mode:normal; }
+body.low-power-effects .enemy-magic-impact > i {
+  box-shadow:0 0 10px var(--enemy-impact-core),0 0 22px var(--enemy-impact-edge);
+}
+body.low-power-effects .cannon-blast-cloud,
+body.low-power-effects .enemy-troll-sweep .troll-sweep-glow { filter:none; }
+body.low-power-effects .range-surface-tile.is-active,
+body.low-power-effects .corridor-surface-tile.is-active { animation:none; }
 
 @media (max-width:520px){
   .game-screen{padding:6px 5px 24px}
