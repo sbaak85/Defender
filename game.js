@@ -42,7 +42,17 @@
     { id: "ballista", text: "弩砲射速極快，適合持續壓制單一路線上的密集敵人。", minLevel: 2 },
     { id: "cannon", text: "加農砲價格昂貴，但砲彈能對三乘三範圍造成強力濺射傷害。", minLevel: 3 },
     { id: "large-enemies", text: "眼魔與章魚怪會占用二乘二格，請預留足夠火力處理大型目標。", minLevel: 2, enemy: "octopus" },
-    { id: "long-defense", text: "第4關起防守時間延長為五分鐘，開戰前請先整頓城牆、兵力與金幣。", minLevel: 4 }
+    { id: "long-defense", text: "第4關起防守時間延長為五分鐘，開戰前請先整頓城牆、兵力與金幣。", minLevel: 4 },
+    { id: "pc-select-recycle", text: "PC版可按1～6快速選取對應走廊格守軍，按Z立即回收目前選定的單位。", desktopOnly: true },
+    { id: "pc-repair", text: "PC版按F可快速維修城牆；若金幣或城牆狀態不符合條件則不會消耗資源。", desktopOnly: true },
+    { id: "pc-speed", text: "PC版按A／D可降低或提高速度，按S可立即回到X1速度。", desktopOnly: true },
+    { id: "pc-pause", text: "PC版按空白鍵可快速暫停或繼續遊戲，適合在敵潮密集時重新判讀戰況。", desktopOnly: true },
+    { id: "quick-deploy", text: "雙擊選兵ICON可將單位快速部署到最左側空格；六格已滿時不會執行。" },
+    { id: "inspect-enemy", text: "選取敵人可查看近戰／遠距、射程與招式名稱，先辨認威脅再調整守軍。" },
+    { id: "deployment-cap", text: "派遣上限只計算仍在場上的守軍；陣亡或回收後會重新空出該兵種名額。", minLevel: 2 },
+    { id: "ranged-pass-through", text: "遠距敵人停下攻擊後不再阻擋同陣營移動，後方敵人仍可能穿越並向前推進。", minLevel: 2 },
+    { id: "large-enemy-retaliation", text: "二乘二大型敵人攻擊城牆時，覆蓋的兩條走廊守軍都可能同時受傷。", minLevel: 2 },
+    { id: "wall-warning", text: "城牆低於一半會閃黃光、低於一成會閃紅光；看到警告時應盡快維修。" }
   ]);
 
   const SPRITE_PATHS = {
@@ -160,6 +170,7 @@
     lowPowerVisualLimits: { playerProjectile: 18, enemyProjectile: 12, impact: 9, muzzle: 6, cannon: 2, slash: 2, troll: 2, number: 12, coin: 8 }
   });
   const RAPID_SFX = new Set(["fireball", "arrow", "slash", "shell", "boom", "bolt", "hit", "wall"]);
+  const UNIT_SELECT_AUDIO = Object.freeze({ path: "assets/audio/音效/PutIn.mp3", volume: 1 });
 
   const els = {
     app: document.querySelector("#app"), board: document.querySelector("#board"), tileLayer: document.querySelector("#tileLayer"),
@@ -177,8 +188,10 @@
     bgm: document.querySelector("#bgmAudio"), title: document.querySelector("#titleScreen"),
     continue: document.querySelector("#continueButton"), countdown: document.querySelector("#countdownOverlay"), toast: document.querySelector("#toastLayer"),
     result: document.querySelector("#resultOverlay"), resultKicker: document.querySelector("#resultKicker"), resultTitle: document.querySelector("#resultTitle"),
-    resultSubtitle: document.querySelector("#resultSubtitle"), resultTip: document.querySelector("#resultTip"), resultTipText: document.querySelector("#resultTipText"),
+    resultSubtitle: document.querySelector("#resultSubtitle"), resultTip: document.querySelector("#resultTip"), resultTipTitle: document.querySelector("#resultTipTitle"), resultTipText: document.querySelector("#resultTipText"),
     resultKills: document.querySelector("#resultKills"), resultTime: document.querySelector("#resultTime"),
+    pauseControls: document.querySelector("#pauseControls"), pauseMute: document.querySelector("#pauseMuteButton"),
+    pauseSpeedDown: document.querySelector("#pauseSpeedDownButton"), pauseSpeed: document.querySelector("#pauseSpeedDisplay"), pauseSpeedUp: document.querySelector("#pauseSpeedUpButton"),
     restart: document.querySelector("#restartButton"), deckCoinPile: document.querySelector("#deckCoinPile"), deckCoinText: document.querySelector("#deckCoinText"),
     fullscreen: document.querySelector("#fullscreenButton"), orientationGuard: document.querySelector("#orientationGuard")
   };
@@ -207,6 +220,8 @@
   let enemyOccupancy = [];
   let enemiesByColumn = [];
   const rangeSurfaceTiles = new Map();
+  let lastUnitCardActivation = { type: null, at: -Infinity };
+  const QUICK_DEPLOY_DOUBLE_TAP_MS = 380;
 
   function initialState() {
     return {
@@ -500,6 +515,14 @@
       card.addEventListener("click", e => {
         if (drag?.moved) return;
         e.preventDefault();
+        const now = performance.now();
+        const isDoubleActivation = e.detail >= 2
+          || (lastUnitCardActivation.type === key && now - lastUnitCardActivation.at <= QUICK_DEPLOY_DOUBLE_TAP_MS);
+        lastUnitCardActivation = isDoubleActivation ? { type: null, at: -Infinity } : { type: key, at: now };
+        if (isDoubleActivation) {
+          quickDeploy(key);
+          return;
+        }
         selectCard(key);
       });
       applyIcon(card.querySelector(".card-icon"), key);
@@ -523,7 +546,7 @@
     els.unitLayer.innerHTML = "";
     resetVisualEffects();
     els.rangeLayer.innerHTML = "";
-    els.result.classList.remove("show", "level-complete");
+    els.result.classList.remove("show", "level-complete", "pause-menu");
     els.resultTip.hidden = true;
     els.recycle.disabled = true;
     createBoard();
@@ -753,7 +776,7 @@
     el.tabIndex = 0;
     el.setAttribute("role", "button");
     el.setAttribute("aria-label", `選取${base.name}`);
-    el.innerHTML = `<div class="enemy-selection-ring" aria-hidden="true"></div><div class="body"><span class="unit-glyph">${base.glyph}</span><div class="enemy-hpbar" aria-hidden="true"><i></i></div></div><div class="unit-name-label" aria-hidden="true">${base.name}<span class="enemy-side-info"><span class="enemy-combat-label ${combatClass}">${combatType}</span><span class="enemy-range-label">${rangeText}</span></span></div>`;
+    el.innerHTML = `<div class="enemy-selection-ring" aria-hidden="true"></div><div class="body"><span class="unit-glyph">${base.glyph}</span><div class="enemy-hpbar" aria-hidden="true"><i></i></div></div><div class="unit-name-label" aria-hidden="true">${base.name}<span class="enemy-side-info"><span class="enemy-combat-label ${combatClass}">${combatType}</span><span class="enemy-range-label">${rangeText}</span><span class="enemy-attack-name">${base.attackName || "—"}</span></span></div>`;
     applySprite(el.querySelector(".body"), enemy.type);
     el.addEventListener("click", e => {
       if (enemy.dead || enemy.remove) return;
@@ -847,31 +870,43 @@
     };
   }
 
-  function launchEnemySpearProjectile(enemy, onHit) {
+  function lizardThrustImpactAt(x, y, strike) {
+    const fx = acquireVisual("impact", `enemy-lizard-thrust-impact strike-${strike}`, `<i></i><b></b><span></span>`);
+    if (!fx) return;
+    fx.style.left = `${x}px`;
+    fx.style.top = `${y}px`;
+    setTimeout(() => releaseVisual("impact", fx), 470);
+  }
+
+  function launchEnemyTripleThrust(enemy, onHit) {
     const from = enemyAttackOrigin(enemy);
     const to = enemyWallImpactPoint(enemy);
     const deltaX = to.x - from.x;
     const deltaY = to.y - from.y;
     const flightAngle = Math.atan2(deltaY, deltaX) * 180 / Math.PI;
     const distance = Math.hypot(deltaX, deltaY);
-    const duration = Math.max(210, (190 + distance * .42) / SPEEDS[state.speedIndex]);
-    const projectile = acquireVisual("enemyProjectile", "enemy-spear-projectile", `<i aria-hidden="true"></i>`);
-    if (!projectile) {
-      setTimeout(onHit, duration);
-      return;
-    }
-    projectile.style.left = `${from.x}px`;
-    projectile.style.top = `${from.y}px`;
-    projectile.style.setProperty("--enemy-flight-angle", `${flightAngle}deg`);
-    const animation = projectile.animate(
-      [{ transform: "translate(0,0)" }, { transform: `translate(${deltaX}px,${deltaY}px)` }],
-      { duration, easing: "linear" }
-    );
-    animation.onfinish = () => {
-      releaseVisual("enemyProjectile", projectile);
-      enemyMagicImpactAt(to.x, to.y, "lizard");
-      onHit();
-    };
+    const speed = SPEEDS[state.speedIndex];
+    const strikeGap = Math.max(26, 72 / speed);
+    const duration = Math.max(100, (170 + distance * .28) / speed);
+    const offsets = [-5, 4, 0];
+
+    offsets.forEach((offset, index) => {
+      setTimeout(() => {
+        const thrust = acquireVisual("enemyProjectile", `enemy-lizard-thrust strike-${index + 1}`, `<i aria-hidden="true"></i><b aria-hidden="true"></b><span aria-hidden="true"></span>`);
+        if (thrust) {
+          thrust.style.left = `${from.x}px`;
+          thrust.style.top = `${from.y}px`;
+          thrust.style.width = `${distance}px`;
+          thrust.style.setProperty("--lizard-thrust-angle", `${flightAngle}deg`);
+          thrust.style.setProperty("--lizard-thrust-offset", `${offset}px`);
+          thrust.style.setProperty("--lizard-thrust-duration", `${duration}ms`);
+          setTimeout(() => releaseVisual("enemyProjectile", thrust), duration + 70);
+        }
+        setTimeout(() => lizardThrustImpactAt(to.x, to.y + offset, index + 1), duration * .68);
+      }, strikeGap * index);
+    });
+
+    setTimeout(onHit, strikeGap * 2 + duration * .78);
   }
 
   function trollRangedSweep(enemy, onHit) {
@@ -933,7 +968,7 @@
         if (attackType === "magic" || attackType === "venom") {
           launchEnemyMagicProjectile(enemy, () => resolveEnemyAttack(enemy, playedAttackAudio));
         } else if (attackType === "spear") {
-          launchEnemySpearProjectile(enemy, () => resolveEnemyAttack(enemy, playedAttackAudio));
+          launchEnemyTripleThrust(enemy, () => resolveEnemyAttack(enemy, playedAttackAudio));
         } else if (enemy.type === "troll" && wallDistance > 1) {
           trollRangedSweep(enemy, () => resolveEnemyAttack(enemy, playedAttackAudio));
         } else {
@@ -1375,6 +1410,20 @@
     sfx("click");
   }
 
+  function quickDeploy(type) {
+    if (!state || state.ended || state.paused || !state.running) return;
+    let targetCol = null;
+    for (let col = 0; col < state.openSlots; col++) {
+      if (!state.defenders[col]) {
+        targetCol = col;
+        break;
+      }
+    }
+    // A full corridor intentionally produces no action or extra notification.
+    if (targetCol === null) return;
+    deploy(type, targetCol);
+  }
+
   function onSlotClick(col) {
     if (!state) return;
     if (state.ended) { clearCharacterSelection(); return; }
@@ -1526,6 +1575,7 @@
     els.wall.setAttribute("aria-selected", "false");
     els.recycle.disabled = selectedDefender === null;
     showRange(selectedDefender === null ? null : state.defenders[selectedDefender]?.type);
+    playAttackSample(UNIT_SELECT_AUDIO);
     sfx("click");
   }
 
@@ -1543,6 +1593,7 @@
     els.wall.setAttribute("aria-selected", "false");
     els.recycle.disabled = true;
     showRange(null);
+    playAttackSample(UNIT_SELECT_AUDIO);
     sfx("click");
   }
 
@@ -1887,6 +1938,9 @@
     setTextIfChanged(els.speed, `×${SPEEDS[state.speedIndex]}`);
     els.speedDown.disabled = state.speedIndex <= 0;
     els.speedUp.disabled = state.speedIndex >= SPEEDS.length - 1;
+    setTextIfChanged(els.pauseSpeed, `×${SPEEDS[state.speedIndex]}`);
+    if (els.pauseSpeedDown) els.pauseSpeedDown.disabled = state.speedIndex <= 0;
+    if (els.pauseSpeedUp) els.pauseSpeedUp.disabled = state.speedIndex >= SPEEDS.length - 1;
     setTextIfChanged(els.pause, state.paused ? "▶" : "Ⅱ");
     Object.entries(PLAYER_TYPES).forEach(([type, def]) => {
       const card = unitCardCache.get(type);
@@ -1937,6 +1991,7 @@
 
     const eligible = INTERMISSION_TIPS.filter(tip => {
       if (tip.lowWallOnly) return false;
+      if (tip.desktopOnly && !window.matchMedia("(hover: hover) and (pointer: fine)").matches) return false;
       if (tip.minLevel && nextLevel < tip.minLevel) return false;
       if (tip.enemy && !levelIncludesEnemy(nextLevel, tip.enemy)) return false;
       return true;
@@ -1990,6 +2045,7 @@
     els.resultKills.textContent = state.kills;
     els.resultTime.textContent = formatTime(LEVEL_CONFIGS[completedLevel].duration);
     els.result.classList.add("level-complete");
+    els.resultTipTitle.textContent = "守城提示";
     els.resultTipText.textContent = intermissionTip.text;
     els.resultTip.hidden = false;
     els.restart.textContent = "繼續開始";
@@ -2068,14 +2124,63 @@
   }
 
   function handleResultAction() {
-    if (resultAction === "next-level") startNextLevel();
+    if (resultAction === "resume") resumePausedGame();
+    else if (resultAction === "next-level") startNextLevel();
     else beginGame();
+  }
+
+  function currentLevelPerformancePreview() {
+    const rule = SCORE_RULES.levelPerformance[state.level];
+    const levelConfig = LEVEL_CONFIGS[state.level];
+    const progress = state.defenseTimeReached
+      ? 1
+      : Math.max(0, Math.min(1, 1 - state.secondsLeft / levelConfig.duration));
+    const wallPreservation = Math.max(0, 1 - state.levelDamageTaken / WALL_MAX_HP);
+    const clearance = state.levelSpawned > 0 ? Math.min(1, state.levelKills / state.levelSpawned) : 1;
+    const parts = {
+      clear: Math.round(rule.clear * progress),
+      wall: Math.round(rule.wallPreservation * wallPreservation * progress),
+      clearance: Math.round(rule.clearance * clearance * progress),
+      flawless: state.levelDamageTaken === 0 ? Math.round(rule.flawless * progress) : 0
+    };
+    return { bonus: parts.clear + parts.wall + parts.clearance + parts.flawless, parts, progress, wallPreservation };
+  }
+
+  function showPauseMenu() {
+    const preview = currentLevelPerformancePreview();
+    state.paused = true;
+    resultAction = "resume";
+    hideResultTip();
+    els.resultKicker.textContent = `第${levelDisplayName(state.level)}關防守中`;
+    els.resultTitle.textContent = "遊戲暫停";
+    els.resultSubtitle.textContent = `當前表現預估 +${preview.bonus.toLocaleString("zh-TW")}｜目前總分 ${Math.floor(state.score).toLocaleString("zh-TW")}`;
+    els.resultKills.textContent = state.kills;
+    els.resultTime.textContent = formatTime(Math.floor(state.elapsed));
+    els.resultTipTitle.textContent = "當前表現";
+    els.resultTipText.textContent = `本關進度 ${Math.round(preview.progress * 100)}%｜城牆保存 ${Math.round(preview.wallPreservation * 100)}%｜繼續防守後分數會依戰況更新。`;
+    els.resultTip.hidden = false;
+    els.restart.textContent = "繼續防守";
+    els.restart.disabled = false;
+    els.result.classList.add("show", "pause-menu");
+    syncUI();
+    sfx("click");
+  }
+
+  function resumePausedGame() {
+    if (!state || state.ended || resultAction !== "resume") return;
+    els.result.classList.remove("show", "pause-menu");
+    hideResultTip();
+    resultAction = "restart";
+    state.paused = false;
+    syncUI();
+    sfx("click");
+    toast("繼續防守");
   }
 
   function togglePause() {
     if (!state || state.ended || !state.running) return;
-    state.paused = !state.paused;
-    syncUI(); sfx("click"); toast(state.paused ? "遊戲已暫停" : "繼續防守");
+    if (state.paused && resultAction === "resume") resumePausedGame();
+    else if (!state.paused) showPauseMenu();
   }
 
   function fullscreenElement() {
@@ -2170,12 +2275,21 @@
     syncSystemPause();
   }
 
-  function adjustSpeed(direction) {
+  function setSpeedIndex(nextIndex) {
     if (!state) return;
-    const nextIndex = Math.max(0, Math.min(SPEEDS.length - 1, state.speedIndex + direction));
+    nextIndex = Math.max(0, Math.min(SPEEDS.length - 1, nextIndex));
     if (nextIndex === state.speedIndex) return;
     state.speedIndex = nextIndex;
     syncUI(); sfx("click"); toast(`遊戲速度 ×${SPEEDS[state.speedIndex]}`);
+  }
+
+  function adjustSpeed(direction) {
+    if (!state) return;
+    setSpeedIndex(state.speedIndex + direction);
+  }
+
+  function resetSpeed() {
+    setSpeedIndex(0);
   }
 
   function toast(message, duration = 1850) {
@@ -2212,7 +2326,7 @@
       ...(config?.move || []),
       ...(config?.swap || [])
     ]);
-    new Set(samples.map(sample => sample.path)).forEach(path => ensureAttackAudioPool(path));
+    new Set([...samples.map(sample => sample.path), UNIT_SELECT_AUDIO.path]).forEach(path => ensureAttackAudioPool(path));
   }
 
   function playAttackSample(sample) {
@@ -2316,6 +2430,11 @@
     els.mute.setAttribute("aria-pressed", String(!muted));
     els.mute.setAttribute("aria-label", muted ? "開啟音樂與音效" : "關閉音樂與音效");
     els.mute.title = muted ? "開啟音樂與音效" : "關閉音樂與音效";
+    if (els.pauseMute) {
+      els.pauseMute.textContent = muted ? "♪ OFF" : "♪ ON";
+      els.pauseMute.setAttribute("aria-pressed", String(!muted));
+      els.pauseMute.setAttribute("aria-label", muted ? "開啟音樂與音效" : "關閉音樂與音效");
+    }
   }
 
   function toggleGlobalAudio() {
@@ -2512,6 +2631,67 @@
   function levelDisplayName(level) { return ["零", "一", "二", "三", "四", "五"][level] || String(level); }
   function formatTime(total) { total = Math.max(0, Math.floor(total)); return `${String(Math.floor(total/60)).padStart(2,"0")}:${String(total%60).padStart(2,"0")}`; }
 
+  function isKeyboardInputTarget(target) {
+    if (!(target instanceof Element)) return false;
+    return Boolean(target.closest("input,textarea,select,[contenteditable='true']"));
+  }
+
+  function clearTransientGameplayFocus() {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && active.matches(".corridor-slot,.unit-card")) active.blur();
+  }
+
+  function selectDefenderByHotkey(col) {
+    if (!state || state.ended || state.paused || !state.running || !state.defenders[col]) return false;
+    if (selectedDefender !== col) selectDefender(col);
+    return true;
+  }
+
+  function handleGameHotkeys(e) {
+    if (isKeyboardInputTarget(e.target) || e.ctrlKey || e.altKey || e.metaKey || e.repeat) return;
+    if (e.code === "Escape") {
+      setDebugMenu(false);
+      return;
+    }
+    if (e.code === "Space") {
+      e.preventDefault();
+      togglePause();
+      return;
+    }
+    if (!gameHasStarted || !state || state.ended) return;
+
+    const numberMatch = /^(?:Digit|Numpad)([1-6])$/.exec(e.code);
+    if (numberMatch) {
+      clearTransientGameplayFocus();
+      if (selectDefenderByHotkey(Number(numberMatch[1]) - 1)) e.preventDefault();
+      return;
+    }
+
+    if (e.code === "KeyA") {
+      e.preventDefault();
+      clearTransientGameplayFocus();
+      adjustSpeed(-1);
+    } else if (e.code === "KeyD") {
+      e.preventDefault();
+      clearTransientGameplayFocus();
+      adjustSpeed(1);
+    } else if (e.code === "KeyS") {
+      e.preventDefault();
+      clearTransientGameplayFocus();
+      resetSpeed();
+    } else if (e.code === "KeyF") {
+      e.preventDefault();
+      clearTransientGameplayFocus();
+      repairWall();
+    } else if (e.code === "KeyZ") {
+      const defender = selectedDefender === null ? null : state.defenders[selectedDefender];
+      if (!defender || state.paused || !state.running) return;
+      e.preventDefault();
+      clearTransientGameplayFocus();
+      recycleSelected();
+    }
+  }
+
   els.continue.addEventListener("click", beginGame);
   els.restart.addEventListener("click", handleResultAction);
   els.repair.addEventListener("click", repairWall);
@@ -2521,6 +2701,9 @@
   els.speedDown.addEventListener("click", () => adjustSpeed(-1));
   els.speedUp.addEventListener("click", () => adjustSpeed(1));
   els.mute.addEventListener("click", toggleGlobalAudio);
+  els.pauseSpeedDown?.addEventListener("click", () => adjustSpeed(-1));
+  els.pauseSpeedUp?.addEventListener("click", () => adjustSpeed(1));
+  els.pauseMute?.addEventListener("click", toggleGlobalAudio);
   els.debug.addEventListener("click", e => { e.stopPropagation(); setDebugMenu(els.debugMenu.hidden); });
   els.debugMenu.addEventListener("click", e => e.stopPropagation());
   els.bgmToggle.addEventListener("click", toggleBgm);
@@ -2546,10 +2729,7 @@
     if (e.target.closest("button,.unit-card,.defender,.enemy,.debug-menu")) return;
     clearCharacterSelection();
   });
-  window.addEventListener("keydown", e => {
-    if (e.code === "Space") { e.preventDefault(); togglePause(); }
-    if (e.code === "Escape") setDebugMenu(false);
-  });
+  window.addEventListener("keydown", handleGameHotkeys);
   document.addEventListener("visibilitychange", syncPageFocus);
   window.addEventListener("blur", syncPageFocus);
   window.addEventListener("focus", syncPageFocus);

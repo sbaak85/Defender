@@ -11,7 +11,7 @@
   <meta name="description" content="6×8 縱向俯視棋盤格塔防遊戲" />
   <link rel="manifest" href="manifest.webmanifest?v=20260718-portrait-v1" />
   <link rel="apple-touch-icon" href="assets/processed/icons/player-warrior-icon-45.png" />
-  <link rel="stylesheet" href="styles.css?v=20260719-deployment-cap-v27" />
+  <link rel="stylesheet" href="styles.css?v=20260720-lizard-thrust-v32" />
 </head>
 <body>
   <main id="app" class="app game-blur-target">
@@ -160,15 +160,27 @@
         <span>擊殺 <b id="resultKills">0</b></span>
         <span>守城 <b id="resultTime">00:00</b></span>
       </div>
+      <div id="pauseControls" class="pause-controls" role="group" aria-label="暫停選單設定">
+        <div class="pause-control-group">
+          <span>音量</span>
+          <button id="pauseMuteButton" class="pause-control-button pause-audio-button" type="button" aria-pressed="true">♪ ON</button>
+        </div>
+        <div class="pause-control-group pause-speed-group">
+          <span>速度</span>
+          <button id="pauseSpeedDownButton" class="pause-control-button" type="button" aria-label="減速">−</button>
+          <strong id="pauseSpeedDisplay">×1</strong>
+          <button id="pauseSpeedUpButton" class="pause-control-button" type="button" aria-label="加速">＋</button>
+        </div>
+      </div>
       <aside id="resultTip" class="result-tip" hidden>
-        <strong>守城提示</strong>
+        <strong id="resultTipTitle">守城提示</strong>
         <span id="resultTipText"></span>
       </aside>
       <button id="restartButton" class="restart-button" type="button">再玩一次</button>
     </div>
   </section>
 
-  <script src="game-config.js?v=20260719-enemy-deployment-cap-v21"></script>
-  <script src="game.js?v=20260719-deployment-cap-v39"></script>
+  <script src="game-config.js?v=20260720-attack-names-v23"></script>
+  <script src="game.js?v=20260720-expanded-tips-v46"></script>
 </body>
 </html>

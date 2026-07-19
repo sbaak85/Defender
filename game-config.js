@@ -8,6 +8,7 @@ window.DEFENDER_CONFIG = {
     "initialResources": 10,
     "gameSpeeds": [
       1,
+      3,
       5,
       10
     ],
@@ -742,6 +743,7 @@ window.DEFENDER_CONFIG = {
     "enemy": {
       "goblin": {
         "displayName": "\u54E5\u5E03\u6797",
+        "attackName": "\u523A\u64CA",
         "faction": "enemy",
         "glyph": "\uD83D\uDC7A",
         "attackDamage": 2,
@@ -786,6 +788,7 @@ window.DEFENDER_CONFIG = {
       },
       "troll": {
         "displayName": "\u5DE8\u9B54",
+        "attackName": "\u6A6B\u6383",
         "faction": "enemy",
         "glyph": "\uD83D\uDC79",
         "attackDamage": 7,
@@ -835,6 +838,7 @@ window.DEFENDER_CONFIG = {
       },
       "beholder": {
         "displayName": "\u773C\u9B54",
+        "attackName": "\u5FF5\u8996\u6CE2",
         "faction": "enemy",
         "glyph": "\uD83D\uDC41\uFE0F",
         "attackDamage": 9,
@@ -884,6 +888,7 @@ window.DEFENDER_CONFIG = {
       },
       "wolf": {
         "displayName": "\u72FC",
+        "attackName": "\u6495\u54AC",
         "faction": "enemy",
         "glyph": "\uD83D\uDC3A",
         "attackDamage": 4,
@@ -933,6 +938,7 @@ window.DEFENDER_CONFIG = {
       },
       "octopus": {
         "displayName": "\u7AE0\u9B5A\u602A",
+        "attackName": "\u6DF5\u51B7\u9B54\u5F48",
         "faction": "enemy",
         "glyph": "\uD83D\uDC19",
         "attackDamage": 15,
@@ -982,6 +988,7 @@ window.DEFENDER_CONFIG = {
       },
       "ghost": {
         "displayName": "\u5E7D\u9B42\u738B",
+        "attackName": "\u5E7D\u51A5\u706B",
         "faction": "enemy",
         "glyph": "\uD83D\uDC7B",
         "attackDamage": 8,
@@ -1031,6 +1038,7 @@ window.DEFENDER_CONFIG = {
       },
       "animatedArmor": {
         "displayName": "\u9B54\u93A7\u885B\u58EB",
+        "attackName": "\u65AC\u64CA",
         "faction": "enemy",
         "glyph": "\u265E",
         "attackDamage": 12,
@@ -1080,6 +1088,7 @@ window.DEFENDER_CONFIG = {
       },
       "skeleton": {
         "displayName": "\u9AB7\u9ACF\u5175",
+        "attackName": "\u65AC\u64CA",
         "faction": "enemy",
         "glyph": "\uD83D\uDC80",
         "attackDamage": 4,
@@ -1129,6 +1138,7 @@ window.DEFENDER_CONFIG = {
       },
       "lizard": {
         "displayName": "\u8725\u8734\u69CD\u5175",
+        "attackName": "\u4E09\u9023\u7A81\u523A",
         "faction": "enemy",
         "glyph": "\uD83E\uDD8E",
         "attackDamage": 7,
@@ -1178,6 +1188,7 @@ window.DEFENDER_CONFIG = {
       },
       "stoneGolem": {
         "displayName": "\u5CA9\u7532\u5DE8\u50CF",
+        "attackName": "\u91CD\u64CA",
         "faction": "enemy",
         "glyph": "\uD83E\uDEA8",
         "attackDamage": 18,
@@ -1227,6 +1238,7 @@ window.DEFENDER_CONFIG = {
       },
       "spider": {
         "displayName": "\u9B54\u6676\u6BD2\u86DB",
+        "attackName": "\u9B54\u6676\u6BD2\u5F48",
         "faction": "enemy",
         "glyph": "\uD83D\uDD77\uFE0F",
         "attackDamage": 6,

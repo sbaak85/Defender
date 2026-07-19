@@ -10,6 +10,8 @@ internal sealed class MainForm : Form
     private static readonly Color AppBack = Color.FromArgb(18, 24, 23);
     private static readonly Color PanelBack = Color.FromArgb(32, 40, 37);
     private static readonly Color CardBack = Color.FromArgb(41, 50, 46);
+    private static readonly Color EnemyCardBack = Color.FromArgb(51, 42, 40);
+    private static readonly Color EnemyCardBorder = Color.FromArgb(143, 88, 70);
     private static readonly Color Gold = Color.FromArgb(224, 181, 91);
     private static readonly Color TextMain = Color.FromArgb(239, 239, 221);
     private static readonly Color TextMuted = Color.FromArgb(174, 190, 181);
@@ -56,11 +58,11 @@ internal sealed class MainForm : Form
         {
             card.PerformLayout();
             var editButton = card.Controls.OfType<Button>().SingleOrDefault(button => button.Text == "修改");
-            if (editButton is null || editButton.Top < 0 || editButton.Bottom > card.ClientSize.Height) return false;
+            if (editButton is null || editButton.Top < 0 || editButton.Bottom > card.ClientSize.Height || !card.HasThumbnail) return false;
         }
         var deploymentUnit = EnumerateUnits().First(unit => unit.Group == "player");
-        using var deploymentEditor = new UnitEditorForm(deploymentUnit, GetLevelCount());
-        return deploymentEditor.ValidateDeploymentEditor(GetLevelCount());
+        using var deploymentEditor = new UnitEditorForm(deploymentUnit, GetLevelCount(), Height);
+        return deploymentEditor.Height == Height && deploymentEditor.ValidateDeploymentEditor(GetLevelCount());
     }
 
     public MainForm()
@@ -68,7 +70,8 @@ internal sealed class MainForm : Form
         Text = "Defender Config Editor";
         StartPosition = FormStartPosition.CenterScreen;
         MinimumSize = new Size(1180, 720);
-        Size = new Size(1460, 900);
+        // Header + action bar + grid padding + three complete 348px card rows.
+        Size = FitToWorkingArea(new Size(1680, 1280), 52);
         BackColor = AppBack;
         ForeColor = TextMain;
         Font = new Font("Microsoft JhengHei UI", 10F, FontStyle.Regular, GraphicsUnit.Point);
@@ -144,6 +147,14 @@ internal sealed class MainForm : Form
         header.Controls.Add(title);
         header.Controls.Add(subtitle);
         Controls.Add(header);
+    }
+
+    private static Size FitToWorkingArea(Size preferred, int margin)
+    {
+        var working = Screen.PrimaryScreen?.WorkingArea ?? new Rectangle(Point.Empty, preferred);
+        return new Size(
+            Math.Max(800, Math.Min(preferred.Width, working.Width - margin)),
+            Math.Max(600, Math.Min(preferred.Height, working.Height - margin)));
     }
 
     private void BuildActions()
@@ -242,7 +253,7 @@ internal sealed class MainForm : Form
 
     private void EditUnit(UnitCard card, UnitRef unit)
     {
-        using var editor = new UnitEditorForm(unit, GetLevelCount());
+        using var editor = new UnitEditorForm(unit, GetLevelCount(), Height);
         PositionEditor(editor, card);
         if (editor.ShowDialog(this) != DialogResult.OK || editor.UpdatedUnit is null) return;
         unit.Parent[unit.Id] = editor.UpdatedUnit;
@@ -351,7 +362,9 @@ internal sealed class MainForm : Form
         private readonly PictureBox thumbnail = new();
         private readonly Label nameLabel = new();
         private readonly Label factionLabel = new();
+        private readonly Label attackNameLabel = new();
         private readonly Dictionary<string, Label> values = new();
+        internal bool HasThumbnail => thumbnail.Image is not null;
 
         public UnitCard(UnitRef unit, string projectRoot, Action<UnitCard, UnitRef> editAction)
         {
@@ -368,61 +381,76 @@ internal sealed class MainForm : Form
         protected override void OnPaint(PaintEventArgs e)
         {
             base.OnPaint(e);
-            using var pen = new Pen(Color.FromArgb(116, 101, 67));
+            var borderColor = unit.Group == "enemy" ? EnemyCardBorder : Color.FromArgb(116, 101, 67);
+            using var pen = new Pen(borderColor);
             e.Graphics.DrawRectangle(pen, 0, 0, Width - 1, Height - 1);
         }
 
         private void Build()
         {
-            thumbnail.Location = new Point(12, 12);
-            thumbnail.Size = new Size(68, 68);
+            thumbnail.Location = new Point(12, 10);
+            thumbnail.Size = new Size(76, 76);
             thumbnail.SizeMode = PictureBoxSizeMode.Zoom;
             thumbnail.BackColor = Color.FromArgb(18, 25, 23);
 
-            nameLabel.Location = new Point(90, 18);
-            nameLabel.Size = new Size(112, 28);
+            nameLabel.Location = new Point(98, 11);
+            nameLabel.Size = new Size(104, 26);
             nameLabel.Font = new Font(Font.FontFamily, 13F, FontStyle.Bold);
             nameLabel.ForeColor = Gold;
+            nameLabel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
 
-            factionLabel.Location = new Point(90, 49);
-            factionLabel.Size = new Size(105, 22);
+            factionLabel.Location = new Point(98, 38);
+            factionLabel.Size = new Size(104, 20);
             factionLabel.ForeColor = TextMuted;
+            factionLabel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+
+            attackNameLabel.Location = new Point(98, 61);
+            attackNameLabel.Size = new Size(104, 21);
+            attackNameLabel.ForeColor = Color.FromArgb(206, 184, 239);
+            attackNameLabel.Font = new Font(Font.FontFamily, 9F, FontStyle.Bold);
+            attackNameLabel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
 
             Controls.Add(thumbnail);
             Controls.Add(nameLabel);
             Controls.Add(factionLabel);
+            Controls.Add(attackNameLabel);
 
+            var resourceKey = unit.Group == "enemy" ? "killReward" : "resourceCost";
+            var resourceTitle = unit.Group == "enemy" ? "擊殺資源" : "花費資源";
             var rows = new[]
             {
                 ("attackDamage", "攻擊傷害"),
                 ("attackRange", "攻擊距離"),
                 ("attackInterval", "攻擊速度"),
                 ("maxHp", "生命血量"),
-                ("resourceCost", "花費資源")
+                (resourceKey, resourceTitle),
+                ("moveInterval", "移動速度"),
+                ("splashDamage", "濺射傷害")
             };
-            var y = 97;
+            var y = 94;
             foreach (var (key, title) in rows)
             {
                 var label = new Label
                 {
                     Text = title,
                     Location = new Point(14, y),
-                    Size = new Size(88, 28),
-                    ForeColor = TextMuted
+                    Size = new Size(88, 25),
+                    ForeColor = TextMuted,
+                    TextAlign = ContentAlignment.MiddleLeft
                 };
                 var value = new Label
                 {
                     TextAlign = ContentAlignment.MiddleRight,
                     Location = new Point(100, y),
-                    Size = new Size(94, 28),
-                    Font = new Font(Font.FontFamily, 11F, FontStyle.Bold),
+                    Size = new Size(94, 25),
+                    Font = new Font(Font.FontFamily, 10.5F, FontStyle.Bold),
                     ForeColor = TextMain,
                     Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
                 };
                 values[key] = value;
                 Controls.Add(label);
                 Controls.Add(value);
-                y += 38;
+                y += 28;
             }
 
             var editButton = new Button
@@ -443,6 +471,8 @@ internal sealed class MainForm : Form
         public void RefreshFrom(UnitRef refreshed)
         {
             unit = refreshed;
+            BackColor = unit.Group == "enemy" ? EnemyCardBack : CardBack;
+            Invalidate();
             nameLabel.Text = unit.DisplayName;
             factionLabel.Text = unit.Group switch
             {
@@ -450,11 +480,16 @@ internal sealed class MainForm : Form
                 "enemy" => "敵方單位",
                 _ => "防禦建築"
             };
+            var attackName = unit.Node["attackName"]?.GetValue<string>();
+            attackNameLabel.Text = string.IsNullOrWhiteSpace(attackName) ? "招式：—" : $"招式：{attackName}";
             values["attackDamage"].Text = FormatNumber(unit.Node, "attackDamage");
             values["attackRange"].Text = $"{FormatNumber(unit.Node, "attackRange")} 格";
             values["attackInterval"].Text = $"{FormatNumber(unit.Node, "attackInterval")} 秒/次";
             values["maxHp"].Text = FormatNumber(unit.Node, "maxHp");
-            values["resourceCost"].Text = FormatNumber(unit.Node, "resourceCost");
+            if (values.TryGetValue("resourceCost", out var resourceCost)) resourceCost.Text = FormatNumber(unit.Node, "resourceCost");
+            if (values.TryGetValue("killReward", out var killReward)) killReward.Text = FormatNumber(unit.Node, "killReward");
+            values["moveInterval"].Text = $"{FormatNumber(unit.Node, "moveInterval")} 秒/格";
+            values["splashDamage"].Text = FormatNumber(unit.Node, "splashDamage");
             LoadThumbnail();
         }
 
@@ -462,24 +497,109 @@ internal sealed class MainForm : Form
         {
             thumbnail.Image?.Dispose();
             thumbnail.Image = null;
-            var thumbnailRelative = unit.Group switch
+            var assetId = ToAssetId(unit.Id);
+            var thumbnailCandidates = unit.Group switch
             {
-                "wall" => "assets/processed/config-editor-thumbnails/wall.png",
-                "player" => $"assets/processed/config-editor-thumbnails/player-{unit.Id}.png",
-                _ => $"assets/processed/config-editor-thumbnails/enemy-{unit.Id}.png"
+                "wall" => new[] { "assets/processed/config-editor-thumbnails/wall.png" },
+                "player" => new[]
+                {
+                    $"assets/processed/config-editor-thumbnails/player-{assetId}.png",
+                    $"assets/processed/config-editor-thumbnails/player-{unit.Id}.png"
+                },
+                _ => new[]
+                {
+                    $"assets/processed/config-editor-thumbnails/enemy-{assetId}.png",
+                    $"assets/processed/config-editor-thumbnails/enemy-{unit.Id}.png"
+                }
             };
-            var sourceRelative = unit.Group switch
+            var sourceCandidates = unit.Group switch
             {
-                "wall" => "assets/generated/dungeon-player-wall-6slot-v2.png",
-                "player" => $"assets/processed/icons/player-{unit.Id}-icon-45.png",
-                _ => $"assets/processed/enemy-{unit.Id}.png"
+                "wall" => new[] { "assets/generated/dungeon-player-wall-6slot-v2.png" },
+                "player" => new[]
+                {
+                    $"assets/processed/icons/player-{assetId}-icon-45.png",
+                    $"assets/processed/icons/player-{unit.Id}-icon-45.png"
+                },
+                _ => new[]
+                {
+                    $"assets/processed/enemy-{assetId}.png",
+                    $"assets/processed/enemy-{unit.Id}.png"
+                }
             };
-            var thumbnailPath = Path.Combine(projectRoot, thumbnailRelative.Replace('/', Path.DirectorySeparatorChar));
-            var sourcePath = Path.Combine(projectRoot, sourceRelative.Replace('/', Path.DirectorySeparatorChar));
-            var path = File.Exists(thumbnailPath) ? thumbnailPath : sourcePath;
-            if (!File.Exists(path)) return;
-            using var source = Image.FromFile(path);
-            thumbnail.Image = new Bitmap(source);
+            var path = thumbnailCandidates
+                .Concat(sourceCandidates)
+                .Select(relative => Path.Combine(projectRoot, relative.Replace('/', Path.DirectorySeparatorChar)))
+                .FirstOrDefault(File.Exists);
+            if (path is null) return;
+
+            try
+            {
+                using var source = Image.FromFile(path);
+                thumbnail.Image = CreateSubjectThumbnail(source);
+            }
+            catch
+            {
+                thumbnail.Image = null;
+            }
+        }
+
+        private static string ToAssetId(string id)
+        {
+            var result = new StringBuilder(id.Length + 4);
+            for (var index = 0; index < id.Length; index++)
+            {
+                var character = id[index];
+                if (index > 0 && char.IsUpper(character)) result.Append('-');
+                result.Append(char.ToLowerInvariant(character));
+            }
+            return result.ToString();
+        }
+
+        private static Bitmap CreateSubjectThumbnail(Image source)
+        {
+            using var bitmap = new Bitmap(source);
+            var minX = bitmap.Width;
+            var minY = bitmap.Height;
+            var maxX = -1;
+            var maxY = -1;
+
+            for (var y = 0; y < bitmap.Height; y++)
+            {
+                for (var x = 0; x < bitmap.Width; x++)
+                {
+                    if (bitmap.GetPixel(x, y).A <= 8) continue;
+                    minX = Math.Min(minX, x);
+                    minY = Math.Min(minY, y);
+                    maxX = Math.Max(maxX, x);
+                    maxY = Math.Max(maxY, y);
+                }
+            }
+
+            var sourceBounds = maxX >= minX && maxY >= minY
+                ? Rectangle.FromLTRB(minX, minY, maxX + 1, maxY + 1)
+                : new Rectangle(0, 0, bitmap.Width, bitmap.Height);
+            const int outputSize = 192;
+            const int margin = 10;
+            var scale = Math.Min(
+                (outputSize - margin * 2F) / sourceBounds.Width,
+                (outputSize - margin * 2F) / sourceBounds.Height);
+            var targetWidth = Math.Max(1, (int)Math.Round(sourceBounds.Width * scale));
+            var targetHeight = Math.Max(1, (int)Math.Round(sourceBounds.Height * scale));
+            var targetBounds = new Rectangle(
+                (outputSize - targetWidth) / 2,
+                (outputSize - targetHeight) / 2,
+                targetWidth,
+                targetHeight);
+
+            var result = new Bitmap(outputSize, outputSize, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+            using var graphics = Graphics.FromImage(result);
+            graphics.Clear(Color.Transparent);
+            graphics.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighQuality;
+            graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+            graphics.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+            graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
+            graphics.DrawImage(bitmap, targetBounds, sourceBounds, GraphicsUnit.Pixel);
+            return result;
         }
 
         private static string FormatNumber(JsonObject node, string key)
@@ -510,12 +630,12 @@ internal sealed class MainForm : Form
         private readonly Button deploymentSave = new();
         public JsonObject? UpdatedUnit { get; private set; }
 
-        public UnitEditorForm(UnitRef unit, int levelCount)
+        public UnitEditorForm(UnitRef unit, int levelCount, int ownerHeight)
         {
             working = JsonNode.Parse(unit.Node.ToJsonString())!.AsObject();
             Text = $"修改｜{unit.DisplayName}";
-            Size = new Size(480, 790);
-            MinimumSize = new Size(440, 640);
+            Size = new Size(600, Math.Max(720, ownerHeight));
+            MinimumSize = new Size(520, 720);
             BackColor = PanelBack;
             ForeColor = TextMain;
             Font = new Font("Microsoft JhengHei UI", 9.5F);
@@ -538,6 +658,7 @@ internal sealed class MainForm : Form
             AddSection("戰鬥與經濟");
             AddNumber("attackDamage", "攻擊傷害");
             AddNumber("attackRange", "攻擊距離（格）");
+            if (unit.Group == "enemy") AddText("attackName", "招式名稱");
             if (unit.Group == "enemy") AddProbability("stopAtMaxRangeChance", "最大射程停下機率 (0~1)");
             AddNumber("attackInterval", "攻擊速度（秒/次）", 2, 0.05M);
             AddNumber("maxHp", "生命血量");
@@ -829,6 +950,8 @@ internal sealed class MainForm : Form
                 if (deploymentLevel.Items.Count > 0) SaveDeploymentLimit(false);
                 working["displayName"] = ((TextBox)fields["displayName"]).Text.Trim();
                 working["glyph"] = ((TextBox)fields["glyph"]).Text;
+                if (fields.TryGetValue("attackName", out var attackNameControl))
+                    working["attackName"] = ((TextBox)attackNameControl).Text.Trim();
                 foreach (var key in new[] { "attackDamage", "attackRange", "attackInterval", "maxHp", "resourceCost", "killReward", "moveInterval", "repairCost", "repairAmount", "splashDamage", "unlockLevel", "scoreValue" })
                     working[key] = ((NumericUpDown)fields[key]).Value;
                 if (fields.TryGetValue("stopAtMaxRangeChance", out var stopChanceControl))
