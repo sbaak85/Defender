@@ -107,6 +107,19 @@
     cost: "assets/processed/UI/coin-single-v1.png"
   };
 
+  const CRITICAL_STYLE_IMAGE_PATHS = Object.freeze([
+    "assets/generated/dungeon-blurred-background-v1.png",
+    "assets/generated/dungeon-perspective-courtyard-v1.png",
+    "assets/generated/druid-floor-tile-v1.png",
+    "assets/generated/dungeon-fortress-6x8-transparent-v2.png",
+    "assets/generated/dungeon-player-wall-6slot-v2.png",
+    "assets/generated/unit-selection-ui-5slot-v2.png",
+    "assets/processed/UI/coin-single-v1.png",
+    "assets/processed/UI/ui-sword-attack-v1.png?v=20260718",
+    "assets/processed/UI/ui-button-repair-pointed-v1.png",
+    "assets/processed/UI/ui-button-recycle-pointed-v1.png"
+  ]);
+
   function footprintSize(unit) {
     return Math.max(1, unit.footprint?.columns || 1, unit.footprint?.rows || 1);
   }
@@ -157,6 +170,7 @@
   const perspectiveSpriteCache = new Map();
   const dragNeutralSpriteCache = new Map();
   const iconCache = new Map();
+  const decodedImageCache = new Map();
   const attackAudioPools = new Map();
   const unitCardCache = new Map();
   const visualPools = new Map();
@@ -186,7 +200,9 @@
     gridToggle: document.querySelector("#gridToggleButton"), unlockAllUnits: document.querySelector("#unlockAllUnitsButton"),
     debugCoins: document.querySelector("#debugCoinsButton"),
     bgm: document.querySelector("#bgmAudio"), title: document.querySelector("#titleScreen"),
-    continue: document.querySelector("#continueButton"), countdown: document.querySelector("#countdownOverlay"), toast: document.querySelector("#toastLayer"),
+    continue: document.querySelector("#continueButton"), preloadStatus: document.querySelector("#preloadStatus"),
+    preloadStatusText: document.querySelector("#preloadStatusText"), preloadPercent: document.querySelector("#preloadPercent"), preloadProgress: document.querySelector("#preloadProgress"),
+    countdown: document.querySelector("#countdownOverlay"), toast: document.querySelector("#toastLayer"),
     result: document.querySelector("#resultOverlay"), resultKicker: document.querySelector("#resultKicker"), resultTitle: document.querySelector("#resultTitle"),
     resultSubtitle: document.querySelector("#resultSubtitle"), resultTip: document.querySelector("#resultTip"), resultTipTitle: document.querySelector("#resultTipTitle"), resultTipText: document.querySelector("#resultTipText"),
     resultKills: document.querySelector("#resultKills"), resultTime: document.querySelector("#resultTime"),
@@ -217,6 +233,10 @@
   let resultAction = "restart";
   let enemyLayoutDirty = true;
   let lowPowerVisualMode = false;
+  let criticalPreloadComplete = false;
+  let criticalPreloadPromise = Promise.resolve();
+  let allPreloadPromise = Promise.resolve();
+  let beginGamePending = false;
   let enemyOccupancy = [];
   let enemiesByColumn = [];
   const rangeSurfaceTiles = new Map();
@@ -558,9 +578,15 @@
   }
 
   async function beginGame() {
+    if (beginGamePending) return;
+    beginGamePending = true;
+    els.continue.disabled = true;
+    els.continue.setAttribute("aria-busy", "true");
     ensureAudio();
+    if (audio?.state === "suspended") audio.resume().catch(() => {});
     gameHasStarted = true;
     startBgm();
+    if (!criticalPreloadComplete) await criticalPreloadPromise.catch(() => {});
     els.title.classList.add("hidden");
     resetGame();
     resultAction = "restart";
@@ -571,6 +597,7 @@
     syncPageFocus();
     lastFrame = performance.now();
     raf = requestAnimationFrame(loop);
+    beginGamePending = false;
   }
 
   async function playCountdown(labels) {
@@ -2319,19 +2346,6 @@
     return attackAudioPools.get(path);
   }
 
-  function preloadAttackAudio() {
-    const samples = Object.values(UNIT_AUDIO_CONFIGS).flatMap(config => [
-      ...(config?.cast?.files || []),
-      ...(config?.attack || []),
-      ...(config?.impact || []),
-      ...(config?.death || []),
-      ...(config?.deploy || []),
-      ...(config?.move || []),
-      ...(config?.swap || [])
-    ]);
-    new Set([...samples.map(sample => sample.path), UNIT_SELECT_AUDIO.path]).forEach(path => ensureAttackAudioPool(path));
-  }
-
   function playAttackSample(sample) {
     if (muted || !sample) return;
     const now = performance.now();
@@ -2564,23 +2578,217 @@
     if (glyph) glyph.style.visibility = "hidden";
   }
 
-  async function loadSprites() {
-    const loadSet = (paths, cache) => Object.entries(paths).map(([type, path]) => new Promise(resolve => {
-      const image = new Image();
-      image.onload = () => { cache.set(type, path); resolve(); };
-      image.onerror = resolve;
-      image.src = path;
-    }));
-    const jobs = [
-      ...loadSet(SPRITE_PATHS, spriteCache),
-      ...loadSet(PERSPECTIVE_SPRITE_PATHS, perspectiveSpriteCache),
-      ...loadSet(DRAG_NEUTRAL_SPRITE_PATHS, dragNeutralSpriteCache),
-      ...loadSet(ICON_PATHS, iconCache)
-    ];
-    await Promise.all(jobs);
+  function refreshLoadedSprites() {
     document.querySelectorAll(".unit-card").forEach(card => applyIcon(card.querySelector(".card-icon"), card.dataset.type));
     document.querySelectorAll(".game-unit").forEach(el => applySprite(el.querySelector(".body"), el.classList[2]));
     document.querySelectorAll(".defender").forEach(el => applySprite(el.querySelector(".defender-body"), state?.defenders[Number(el.dataset.col)]?.type, Number(el.dataset.col)));
+  }
+
+  function withPreloadTimeout(promise, timeoutMs, label) {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`預載逾時：${label}`)), timeoutMs);
+      promise.then(
+        value => { clearTimeout(timer); resolve(value); },
+        error => { clearTimeout(timer); reject(error); }
+      );
+    });
+  }
+
+  async function preloadImageResource(path, priority) {
+    if (decodedImageCache.has(path)) return decodedImageCache.get(path);
+    const image = new Image();
+    image.decoding = "async";
+    if ("fetchPriority" in image) image.fetchPriority = priority === "critical" ? "high" : "low";
+    const loaded = new Promise((resolve, reject) => {
+      image.onload = () => resolve();
+      image.onerror = () => reject(new Error(`圖片載入失敗：${path}`));
+      image.src = path;
+      if (image.complete && image.naturalWidth > 0) resolve();
+    });
+    await withPreloadTimeout(loaded, priority === "critical" ? 8000 : 12000, path);
+    if (typeof image.decode === "function") await image.decode().catch(() => {});
+    image.onload = null;
+    image.onerror = null;
+    decodedImageCache.set(path, image);
+    return image;
+  }
+
+  function preloadAudioElement(sound, path, priority) {
+    if (sound.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) return Promise.resolve(sound);
+    sound.preload = "auto";
+    const ready = new Promise((resolve, reject) => {
+      const cleanup = () => {
+        sound.removeEventListener("loadeddata", onReady);
+        sound.removeEventListener("canplay", onReady);
+        sound.removeEventListener("error", onError);
+      };
+      const onReady = () => { cleanup(); resolve(sound); };
+      const onError = () => { cleanup(); reject(new Error(`音效載入失敗：${path}`)); };
+      sound.addEventListener("loadeddata", onReady, { once: true });
+      sound.addEventListener("canplay", onReady, { once: true });
+      sound.addEventListener("error", onError, { once: true });
+      sound.load();
+    });
+    return withPreloadTimeout(ready, priority === "critical" ? 6000 : 10000, path);
+  }
+
+  function configuredAudioPaths(config) {
+    if (!config) return [];
+    return [
+      ...(config.cast?.files || []),
+      ...(config.attack || []),
+      ...(config.impact || []),
+      ...(config.death || []),
+      ...(config.deploy || []),
+      ...(config.move || []),
+      ...(config.swap || [])
+    ].map(sample => sample.path).filter(Boolean);
+  }
+
+  function buildPreloadTasks() {
+    const registry = new Map();
+    const register = (id, priority, loader, onReady = null, maxAttempts = 2) => {
+      if (!registry.has(id)) registry.set(id, { id, priority, loader, onReady: [], status: "pending", maxAttempts });
+      const task = registry.get(id);
+      if (priority === "critical") task.priority = "critical";
+      if (onReady) task.onReady.push(onReady);
+    };
+    const registerImage = (path, priority, onReady = null) => {
+      register(`image:${path}`, priority, () => preloadImageResource(path, priority), onReady);
+    };
+    const registerAudio = (path, priority, sound = null) => {
+      register(`audio:${path}`, priority, () => {
+        const target = sound || ensureAttackAudioPool(path).sounds[0];
+        return preloadAudioElement(target, path, priority);
+      }, null, 1);
+    };
+    const firstLevelEnemies = new Set(
+      Object.keys(ENEMY_TYPES).filter(type => Number(LEVEL_CONFIGS[1]?.weight?.[type] || 0) > 0)
+    );
+    const firstLevelPlayers = new Set(
+      Object.keys(PLAYER_TYPES).filter(type => Number(UNIT_UNLOCK_LEVEL[type] || 1) <= 1)
+    );
+
+    registerAudio(els.bgm.currentSrc || els.bgm.getAttribute("src"), "critical", els.bgm);
+    CRITICAL_STYLE_IMAGE_PATHS.forEach(path => registerImage(path, "critical"));
+    Object.entries(SPRITE_PATHS).forEach(([type, path]) => {
+      const priority = firstLevelPlayers.has(type) || firstLevelEnemies.has(type) ? "critical" : "background";
+      registerImage(path, priority, () => spriteCache.set(type, path));
+    });
+    Object.entries(ICON_PATHS).forEach(([type, path]) => registerImage(path, "critical", () => iconCache.set(type, path)));
+    Object.entries(CARD_STAT_ICON_PATHS).forEach(([, path]) => registerImage(path, "critical"));
+    Object.entries(PERSPECTIVE_SPRITE_PATHS).forEach(([type, path]) => registerImage(path, "background", () => perspectiveSpriteCache.set(type, path)));
+    Object.entries(DRAG_NEUTRAL_SPRITE_PATHS).forEach(([type, path]) => registerImage(path, "background", () => dragNeutralSpriteCache.set(type, path)));
+
+    Object.entries(UNIT_AUDIO_CONFIGS).forEach(([type, config]) => {
+      const priority = type === "wall" || firstLevelPlayers.has(type) || firstLevelEnemies.has(type) ? "critical" : "background";
+      configuredAudioPaths(config).forEach(path => registerAudio(path, priority));
+    });
+    registerAudio(UNIT_SELECT_AUDIO.path, "critical");
+
+    return [...registry.values()];
+  }
+
+  async function executePreloadTask(task, progress) {
+    let finalError = null;
+    for (let attempt = 0; attempt < task.maxAttempts; attempt++) {
+      try {
+        await task.loader();
+        task.onReady.forEach(callback => callback());
+        task.status = "ready";
+        finalError = null;
+        break;
+      } catch (error) {
+        finalError = error;
+        if (attempt + 1 < task.maxAttempts) await wait(180);
+      }
+    }
+    if (finalError) {
+      task.status = "failed";
+      progress.failed.push({ id: task.id, error: finalError });
+    }
+    progress.completed++;
+    if (task.priority === "critical") progress.criticalCompleted++;
+    updatePreloadUi(progress);
+  }
+
+  async function runPreloadQueue(tasks, progress, concurrency) {
+    let cursor = 0;
+    const worker = async () => {
+      while (cursor < tasks.length) {
+        const task = tasks[cursor++];
+        await executePreloadTask(task, progress);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, worker));
+  }
+
+  function updatePreloadUi(progress) {
+    if (!els.preloadStatus) return;
+    const totalPercent = progress.total ? Math.round(progress.completed / progress.total * 100) : 100;
+    const criticalPercent = progress.criticalTotal ? Math.round(progress.criticalCompleted / progress.criticalTotal * 100) : 100;
+    els.preloadPercent.textContent = `${totalPercent}%`;
+    els.preloadProgress.style.width = `${totalPercent}%`;
+    if (!criticalPreloadComplete) {
+      els.preloadStatusText.textContent = `正在準備首關資源 ${progress.criticalCompleted}/${progress.criticalTotal}`;
+      els.continue.textContent = `Loading ${criticalPercent}%`;
+      return;
+    }
+    if (progress.completed < progress.total) {
+      els.preloadStatusText.textContent = `首關資源已就緒 · 背景載入 ${totalPercent}%`;
+      return;
+    }
+    if (progress.failed.length) {
+      els.preloadStatus.classList.add("warning");
+      els.preloadStatusText.textContent = `${progress.failed.length} 個資源使用備援，遊戲仍可開始`;
+    } else {
+      els.preloadStatus.classList.add("ready");
+      els.preloadStatusText.textContent = "全部遊戲資源已就緒";
+    }
+  }
+
+  function unlockTitleAfterCriticalPreload(progress, timedOut) {
+    criticalPreloadComplete = true;
+    els.continue.disabled = false;
+    els.continue.removeAttribute("aria-busy");
+    els.continue.textContent = "Tap to continue";
+    if (timedOut) {
+      els.preloadStatus.classList.add("warning");
+      els.preloadStatusText.textContent = "首關可開始，其餘資源持續載入";
+    }
+    updatePreloadUi(progress);
+    refreshLoadedSprites();
+  }
+
+  function startFormalPreload() {
+    const tasks = buildPreloadTasks();
+    const criticalTasks = tasks.filter(task => task.priority === "critical");
+    const backgroundTasks = tasks.filter(task => task.priority !== "critical");
+    const progress = {
+      total: tasks.length,
+      completed: 0,
+      criticalTotal: criticalTasks.length,
+      criticalCompleted: 0,
+      failed: []
+    };
+    updatePreloadUi(progress);
+    const criticalBatch = runPreloadQueue(criticalTasks, progress, 6);
+    criticalPreloadPromise = Promise.race([
+      criticalBatch.then(() => false),
+      wait(8000).then(() => true)
+    ]).then(timedOut => unlockTitleAfterCriticalPreload(progress, timedOut));
+    allPreloadPromise = criticalBatch
+      .then(() => new Promise(resolve => {
+        if ("requestIdleCallback" in window) window.requestIdleCallback(() => resolve(), { timeout: 700 });
+        else setTimeout(resolve, 120);
+      }))
+      .then(() => runPreloadQueue(backgroundTasks, progress, 4))
+      .then(() => {
+        refreshLoadedSprites();
+        updatePreloadUi(progress);
+        return progress;
+      });
+    return criticalPreloadPromise;
   }
 
   function tone(freq, duration=.1, type="sine", volume=.05, slide=0) {
@@ -2749,6 +2957,5 @@
   syncFullscreenUI();
   syncPageFocus();
   syncOrientationGuard();
-  preloadAttackAudio();
-  loadSprites();
+  startFormalPreload();
 })();
