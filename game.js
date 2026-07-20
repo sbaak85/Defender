@@ -2769,6 +2769,10 @@
     const criticalPercent = progress.criticalTotal ? Math.round(progress.criticalCompleted / progress.criticalTotal * 100) : 100;
     els.preloadPercent.textContent = `${totalPercent}%`;
     els.preloadProgress.style.width = `${totalPercent}%`;
+    const preloadFinished = progress.completed >= progress.total;
+    els.preloadStatus.classList.toggle("is-complete", preloadFinished);
+    els.preloadStatus.setAttribute("aria-hidden", preloadFinished ? "true" : "false");
+    if (preloadFinished) return;
     if (!criticalPreloadComplete) {
       els.preloadStatusText.textContent = `正在準備首關資源 ${progress.criticalCompleted}/${progress.criticalTotal}`;
       els.continue.textContent = `Loading ${criticalPercent}%`;
