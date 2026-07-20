@@ -98,7 +98,7 @@ button { font: inherit; }
 }
 .debug-button:hover { filter: brightness(1.2); transform: translateY(-1px); }
 .debug-menu {
-  position: absolute; z-index: 60; top: calc(100% + 8px); right: 0; width: 190px; padding: 11px; border: 1px solid rgba(162,228,198,.3); border-radius: 11px;
+  position: absolute; z-index: 60; top: calc(100% + 8px); right: 0; width: 216px; padding: 11px; border: 1px solid rgba(162,228,198,.3); border-radius: 11px;
   background: linear-gradient(145deg, rgba(38,58,50,.98), rgba(8,19,15,.98)); box-shadow: 0 14px 32px rgba(0,0,0,.55), inset 0 1px rgba(255,255,255,.08);
 }
 .debug-option + .debug-option { margin-top: 11px; padding-top: 11px; border-top: 1px solid rgba(208,165,91,.34); }
@@ -108,6 +108,13 @@ button { font: inherit; }
   box-shadow: 0 0 14px rgba(72,255,162,.12), inset 0 1px rgba(255,255,255,.1); cursor: pointer; font-size: 12px; font-weight: 900; letter-spacing: .08em;
 }
 .bgm-toggle.is-off { color: #c4cbc8; border-color: rgba(190,205,198,.22); background: linear-gradient(#3a4541, #1b2320); box-shadow: inset 0 1px rgba(255,255,255,.06); }
+.quality-toggle { display:grid;grid-template-columns:repeat(3,1fr);gap:5px; }
+.quality-button {
+  min-width:0;min-height:34px;padding:0 4px;border:1px solid rgba(174,190,182,.28);border-radius:6px;color:#aaa99f;
+  background:linear-gradient(#3a4541,#1b2320);box-shadow:inset 0 1px rgba(255,255,255,.06),0 2px 4px rgba(0,0,0,.4);cursor:pointer;font-size:11px;font-weight:900;
+}
+.quality-button:hover { filter:brightness(1.16); }
+.quality-button.is-active { color:#effff7;border-color:rgba(95,255,170,.62);background:linear-gradient(#39775f,#1f4e3c 48%,#0c291f 52%,#173d30);box-shadow:0 0 12px rgba(72,255,162,.17),inset 0 1px rgba(255,255,255,.13); }
 
 .battlefield-shell { position: relative; width: min(94vw, 620px); margin:calc(var(--tile) * -1.08 + 11px) auto 0; filter: drop-shadow(0 26px 42px rgba(0,0,0,.5)); }
 .dungeon-crown {
@@ -2261,37 +2268,42 @@ body {
 .orientation-phone::after { content:"";width:5px;height:5px;border-radius:50%;background:#e6bf71;align-self:end;margin-bottom:4px; }
 @keyframes phoneTurn { 0%,25%{transform:rotate(90deg)}65%,100%{transform:rotate(0)} }
 
-/* Mobile and low-memory devices retain gameplay timing while reducing costly
-   off-screen filters, continuously animated layers, and secondary particles. */
-body.low-power-effects .game-unit .body,
-body.low-power-effects .defender .defender-body { animation:none; }
-/* Preserve the brief attack recoil on mobile while continuous idle motion
-   remains disabled. This transform-only animation stays compositor-friendly. */
-body.low-power-effects .defender.attack .defender-body {
+/* Medium keeps important combat feedback while trimming continuous enemy motion
+   and the most expensive secondary particle layers. */
+body.quality-medium .game-unit:not(.hit):not(.attacking) .body { animation:none; }
+body.quality-medium .muzzle-flash .muzzle-sparks,
+body.quality-medium .cannon-shockwave.secondary { display:none; }
+body.quality-medium .enemy-magic-impact { mix-blend-mode:normal; }
+
+/* Standard is the manual performance mode. Bullet bodies, hit flashes, attack
+   recoil, health bars, selection rings, countdowns and system messages remain. */
+body.quality-standard .game-unit:not(.hit):not(.attacking) .body,
+body.quality-standard .defender:not(.attack) .defender-body { animation:none; }
+body.quality-standard .defender.attack .defender-body {
   animation:defenderAttackMobile .26s cubic-bezier(.17,.89,.32,1.22);
   will-change:transform;
 }
-body.low-power-effects .game-unit .body.has-sprite,
-body.low-power-effects .defender .defender-body.has-sprite {
+body.quality-standard .game-unit .body.has-sprite,
+body.quality-standard .defender .defender-body.has-sprite {
   filter:drop-shadow(0 5px 4px rgba(0,0,0,.72));
 }
-body.low-power-effects .enemy-magic-projectile > i {
+body.quality-standard .enemy-magic-projectile > i {
   animation:none;
   box-shadow:0 0 7px var(--enemy-orb-core),0 0 15px var(--enemy-orb-edge);
 }
-body.low-power-effects .enemy-magic-projectile > i::before,
-body.low-power-effects .enemy-magic-impact > span,
-body.low-power-effects .muzzle-flash .muzzle-sparks,
-body.low-power-effects .muzzle-flash .muzzle-ring,
-body.low-power-effects .cannon-shockwave.secondary { display:none; }
-body.low-power-effects .enemy-magic-impact { mix-blend-mode:normal; }
-body.low-power-effects .enemy-magic-impact > i {
+body.quality-standard .enemy-magic-projectile > i::before,
+body.quality-standard .enemy-magic-impact > span,
+body.quality-standard .muzzle-flash .muzzle-sparks,
+body.quality-standard .muzzle-flash .muzzle-ring,
+body.quality-standard .cannon-shockwave.secondary { display:none; }
+body.quality-standard .enemy-magic-impact { mix-blend-mode:normal; }
+body.quality-standard .enemy-magic-impact > i {
   box-shadow:0 0 10px var(--enemy-impact-core),0 0 22px var(--enemy-impact-edge);
 }
-body.low-power-effects .cannon-blast-cloud,
-body.low-power-effects .enemy-troll-sweep .troll-sweep-glow { filter:none; }
-body.low-power-effects .range-surface-tile.is-active,
-body.low-power-effects .corridor-surface-tile.is-active { animation:none; }
+body.quality-standard .cannon-blast-cloud,
+body.quality-standard .enemy-troll-sweep .troll-sweep-glow { filter:none; }
+body.quality-standard .range-surface-tile.is-active,
+body.quality-standard .corridor-surface-tile.is-active { animation:none; }
 
 @media (max-width:520px){
   .game-screen{padding:6px 5px 24px}

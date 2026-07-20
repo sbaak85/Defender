@@ -180,9 +180,14 @@
     uiInterval: .1,
     maxPoolSize: 36,
     audioRetriggerMs: 55,
-    desktopVisualLimits: { playerProjectile: 32, enemyProjectile: 24, impact: 18, muzzle: 12, cannon: 4, slash: 4, troll: 4, number: 24, coin: 14 },
-    lowPowerVisualLimits: { playerProjectile: 18, enemyProjectile: 12, impact: 9, muzzle: 6, cannon: 2, slash: 2, troll: 2, number: 12, coin: 8 }
+    qualityProfiles: {
+      standard: { visualLimits: { playerProjectile: 18, enemyProjectile: 12, impact: 9, muzzle: 6, cannon: 2, slash: 2, troll: 2, number: 12, coin: 8 }, audioVoices: 3, cannonDebris: 6 },
+      medium: { visualLimits: { playerProjectile: 24, enemyProjectile: 18, impact: 13, muzzle: 9, cannon: 3, slash: 3, troll: 3, number: 18, coin: 11 }, audioVoices: 4, cannonDebris: 10 },
+      high: { visualLimits: { playerProjectile: 32, enemyProjectile: 24, impact: 18, muzzle: 12, cannon: 4, slash: 4, troll: 4, number: 24, coin: 14 }, audioVoices: 5, cannonDebris: 14 }
+    }
   });
+  const VISUAL_QUALITY_STORAGE_KEY = "defender.visualQuality";
+  const VISUAL_QUALITY_LABELS = Object.freeze({ standard: "一般品質", medium: "中等品質", high: "高品質" });
   const RAPID_SFX = new Set(["fireball", "arrow", "slash", "shell", "boom", "bolt", "hit", "wall"]);
   const UNIT_SELECT_AUDIO = Object.freeze({ path: "assets/audio/音效/PutIn.mp3", volume: 1 });
 
@@ -198,7 +203,7 @@
     pause: document.querySelector("#pauseButton"), mute: document.querySelector("#muteButton"), debug: document.querySelector("#debugButton"),
     debugMenu: document.querySelector("#debugMenu"), bgmToggle: document.querySelector("#bgmToggleButton"), collisionToggle: document.querySelector("#collisionToggleButton"),
     gridToggle: document.querySelector("#gridToggleButton"), unlockAllUnits: document.querySelector("#unlockAllUnitsButton"),
-    debugCoins: document.querySelector("#debugCoinsButton"),
+    debugCoins: document.querySelector("#debugCoinsButton"), qualityButtons: [...document.querySelectorAll(".quality-button")],
     bgm: document.querySelector("#bgmAudio"), title: document.querySelector("#titleScreen"),
     continue: document.querySelector("#continueButton"), preloadStatus: document.querySelector("#preloadStatus"),
     preloadStatusText: document.querySelector("#preloadStatusText"), preloadPercent: document.querySelector("#preloadPercent"), preloadProgress: document.querySelector("#preloadProgress"),
@@ -232,7 +237,7 @@
   let resumeAfterSystemPause = false;
   let resultAction = "restart";
   let enemyLayoutDirty = true;
-  let lowPowerVisualMode = false;
+  let visualQuality = "high";
   let criticalPreloadComplete = false;
   let criticalPreloadPromise = Promise.resolve();
   let allPreloadPromise = Promise.resolve();
@@ -265,18 +270,54 @@
     if (element.style.getPropertyValue(property) !== value) element.style.setProperty(property, value);
   }
 
-  function detectLowPowerVisualMode() {
+  function isMobileVisualDevice() {
     const reportsMobile = navigator.userAgentData?.mobile === true
       || /Android|webOS|iPhone|iPad|iPod|IEMobile|Opera Mini/i.test(navigator.userAgent || "");
     const coarseTouchDevice = navigator.maxTouchPoints > 0
       && window.matchMedia("(hover: none) and (pointer: coarse)").matches;
     const compactTouchScreen = Math.min(window.screen?.width || innerWidth, window.screen?.height || innerHeight) <= 900;
-    lowPowerVisualMode = reportsMobile || (coarseTouchDevice && compactTouchScreen);
-    document.body.classList.toggle("low-power-effects", lowPowerVisualMode);
+    return reportsMobile || (coarseTouchDevice && compactTouchScreen);
+  }
+
+  function qualityProfile() {
+    return PERFORMANCE.qualityProfiles[visualQuality] || PERFORMANCE.qualityProfiles.high;
+  }
+
+  function syncVisualQualityUI() {
+    els.qualityButtons.forEach(button => {
+      const active = button.dataset.quality === visualQuality;
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+  }
+
+  function setVisualQuality(quality, { persist = false, announce = false } = {}) {
+    if (!PERFORMANCE.qualityProfiles[quality]) return;
+    visualQuality = quality;
+    document.body.classList.remove("quality-standard", "quality-medium", "quality-high", "low-power-effects");
+    document.body.classList.add(`quality-${quality}`);
+    document.body.dataset.visualQuality = quality;
+    if (persist) {
+      try { localStorage.setItem(VISUAL_QUALITY_STORAGE_KEY, quality); } catch (_) {}
+    }
+    syncVisualQualityUI();
+    if (announce) {
+      sfx("click");
+      toast(`特效品質：${VISUAL_QUALITY_LABELS[quality]}`);
+    }
+  }
+
+  function initializeVisualQuality() {
+    let savedQuality = null;
+    try { savedQuality = localStorage.getItem(VISUAL_QUALITY_STORAGE_KEY); } catch (_) {}
+    const preferred = PERFORMANCE.qualityProfiles[savedQuality]
+      ? savedQuality
+      : (isMobileVisualDevice() ? "medium" : "high");
+    setVisualQuality(preferred);
   }
 
   function visualLimit(kind) {
-    const limits = lowPowerVisualMode ? PERFORMANCE.lowPowerVisualLimits : PERFORMANCE.desktopVisualLimits;
+    const limits = qualityProfile().visualLimits;
     return limits[kind] ?? 8;
   }
 
@@ -563,7 +604,6 @@
     selectedEnemyId = null;
     selectedWall = false;
     resetEnemyIndexes();
-    detectLowPowerVisualMode();
     els.wall.classList.remove("selected");
     els.wall.setAttribute("aria-selected", "false");
     els.unitLayer.innerHTML = "";
@@ -1218,7 +1258,7 @@
 
   function cannonExplosionAt(x, y) {
     const blastSize = Math.max(220, Math.min(320, els.board.clientWidth / COLS * 2.75));
-    const debrisCount = lowPowerVisualMode ? 6 : 14;
+    const debrisCount = qualityProfile().cannonDebris;
     const debris = Array.from({ length: debrisCount }, (_, index) => {
       const angle = index * (360 / debrisCount) + (index % 2 ? 6 : -3);
       const distance = -(18 + index % 5 * 6);
@@ -2353,7 +2393,7 @@
     if (now - lastPlayed < PERFORMANCE.audioRetriggerMs) return;
     const pool = ensureAttackAudioPool(sample.path);
     let sound = pool.sounds.find(candidate => candidate.paused || candidate.ended);
-    const maxVoices = lowPowerVisualMode ? 3 : 5;
+    const maxVoices = qualityProfile().audioVoices;
     if (!sound && pool.sounds.length < maxVoices) {
       sound = createAttackAudio(sample.path);
       pool.sounds.push(sound);
@@ -2920,6 +2960,9 @@
   els.bgmToggle.addEventListener("click", toggleBgm);
   els.collisionToggle.addEventListener("click", toggleEnemyCollision);
   els.gridToggle.addEventListener("click", toggleBoardGrid);
+  els.qualityButtons.forEach(button => button.addEventListener("click", () => {
+    setVisualQuality(button.dataset.quality, { persist: true, announce: true });
+  }));
   els.unlockAllUnits.addEventListener("click", toggleAllUnitsDebug);
   els.debugCoins.addEventListener("click", setDebugCoins);
   els.wall.addEventListener("click", e => {
@@ -2946,9 +2989,10 @@
   window.addEventListener("focus", syncPageFocus);
   document.addEventListener("fullscreenchange", syncFullscreenUI);
   document.addEventListener("webkitfullscreenchange", syncFullscreenUI);
-  window.addEventListener("orientationchange", () => setTimeout(() => { syncOrientationGuard(); detectLowPowerVisualMode(); }, 80));
-  window.addEventListener("resize", () => { syncOrientationGuard(); detectLowPowerVisualMode(); }, { passive: true });
+  window.addEventListener("orientationchange", () => setTimeout(syncOrientationGuard, 80));
+  window.addEventListener("resize", syncOrientationGuard, { passive: true });
 
+  initializeVisualQuality();
   resetGame();
   syncAudioUI();
   syncBgmUI();

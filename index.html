@@ -11,7 +11,7 @@
   <meta name="description" content="6×8 縱向俯視棋盤格塔防遊戲" />
   <link rel="manifest" href="manifest.webmanifest?v=20260718-portrait-v1" />
   <link rel="apple-touch-icon" href="assets/processed/icons/player-warrior-icon-45.png" />
-  <link rel="stylesheet" href="styles.css?v=20260720-asset-preloader-v33" />
+  <link rel="stylesheet" href="styles.css?v=20260720-visual-quality-v34" />
 </head>
 <body>
   <main id="app" class="app game-blur-target">
@@ -60,6 +60,14 @@
           <div class="debug-option">
             <span class="debug-menu-label">棋盤格框線</span>
             <button id="gridToggleButton" class="bgm-toggle grid-toggle is-off" type="button" aria-pressed="false">Grid OFF</button>
+          </div>
+          <div class="debug-option">
+            <span class="debug-menu-label">特效品質</span>
+            <div class="quality-toggle" role="group" aria-label="特效品質切換">
+              <button id="qualityStandardButton" class="quality-button" type="button" data-quality="standard" aria-pressed="false">一般</button>
+              <button id="qualityMediumButton" class="quality-button" type="button" data-quality="medium" aria-pressed="false">中等</button>
+              <button id="qualityHighButton" class="quality-button" type="button" data-quality="high" aria-pressed="false">高</button>
+            </div>
           </div>
           <div class="debug-option">
             <span class="debug-menu-label">守軍單位</span>
@@ -188,6 +196,6 @@
   </section>
 
   <script src="game-config.js?v=20260720-attack-names-v23"></script>
-  <script src="game.js?v=20260720-asset-preloader-v47"></script>
+  <script src="game.js?v=20260720-visual-quality-v48"></script>
 </body>
 </html>
