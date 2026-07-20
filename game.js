@@ -246,9 +246,12 @@
   }
 
   function detectLowPowerVisualMode() {
-    const compactScreen = window.matchMedia("(max-width: 820px)").matches;
-    const limitedMemory = Number(navigator.deviceMemory || 8) <= 4;
-    lowPowerVisualMode = compactScreen || limitedMemory;
+    const reportsMobile = navigator.userAgentData?.mobile === true
+      || /Android|webOS|iPhone|iPad|iPod|IEMobile|Opera Mini/i.test(navigator.userAgent || "");
+    const coarseTouchDevice = navigator.maxTouchPoints > 0
+      && window.matchMedia("(hover: none) and (pointer: coarse)").matches;
+    const compactTouchScreen = Math.min(window.screen?.width || innerWidth, window.screen?.height || innerHeight) <= 900;
+    lowPowerVisualMode = reportsMobile || (coarseTouchDevice && compactTouchScreen);
     document.body.classList.toggle("low-power-effects", lowPowerVisualMode);
   }
 

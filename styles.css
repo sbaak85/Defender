@@ -2334,4 +2334,12 @@ body.low-power-effects .corridor-surface-tile.is-active { animation:none; }
   .mobile-fullscreen-button{display:none}
 }
 @media (display-mode:standalone){.mobile-fullscreen-button{display:none}}
-@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important}}
+/* Keep gameplay feedback and essential system messages visible even when the
+   operating system requests reduced motion. Only continuous decorative UI
+   motion is removed; countdown labels and toasts use a static presentation. */
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto!important}
+  .continue-button,.orientation-phone{animation:none!important}
+  .countdown-overlay.pop{animation:none!important;opacity:1!important;transform:none!important}
+  .toast{animation:none!important;opacity:1!important;transform:none!important}
+}
