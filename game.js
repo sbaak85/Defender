@@ -210,6 +210,7 @@
     countdown: document.querySelector("#countdownOverlay"), toast: document.querySelector("#toastLayer"),
     result: document.querySelector("#resultOverlay"), resultKicker: document.querySelector("#resultKicker"), resultTitle: document.querySelector("#resultTitle"),
     resultSubtitle: document.querySelector("#resultSubtitle"), resultTip: document.querySelector("#resultTip"), resultTipTitle: document.querySelector("#resultTipTitle"), resultTipText: document.querySelector("#resultTipText"),
+    pausePerformance: document.querySelector("#pausePerformance"), pausePerformanceText: document.querySelector("#pausePerformanceText"),
     resultKills: document.querySelector("#resultKills"), resultTime: document.querySelector("#resultTime"),
     pauseControls: document.querySelector("#pauseControls"), pauseMute: document.querySelector("#pauseMuteButton"),
     pauseSpeedDown: document.querySelector("#pauseSpeedDownButton"), pauseSpeed: document.querySelector("#pauseSpeedDisplay"), pauseSpeedUp: document.querySelector("#pauseSpeedUpButton"),
@@ -254,7 +255,7 @@
       enemies: [], defenders: Array(COLS).fill(null), openSlots: Math.min(COLS, GAME_RULES.startingOpenSlots), spawnCooldown: 1.2, pendingSpawn: null, kills: 0, levelKills: 0, levelSpawned: 0,
       killScore: 0, defenseScore: 0, performanceScore: 0, wallSafeTime: 0, defenseScoreBuffer: 0, levelDamageTaken: 0,
       defenseTimeReached: false, clearPhaseElapsed: 0,
-      levelBonuses: {}, awardedLevels: [], shownTipIds: [], speedIndex: 0, nextEnemyId: 1, debugAllUnitsUnlocked: false,
+      levelBonuses: {}, awardedLevels: [], shownTipIds: [], shownPauseTipIds: [], lastPauseTipId: "", speedIndex: 0, nextEnemyId: 1, debugAllUnitsUnlocked: false,
       uiCooldown: 0, livingEnemies: 0, enemyTypeCounts: Object.create(null), levelSpawnedByType: Object.create(null)
     };
   }
@@ -611,6 +612,7 @@
     els.rangeLayer.innerHTML = "";
     els.result.classList.remove("show", "level-complete", "pause-menu");
     els.resultTip.hidden = true;
+    els.pausePerformance.hidden = true;
     els.recycle.disabled = true;
     createBoard();
     createDeck();
@@ -1412,7 +1414,7 @@
     const point = gridPoint(col + .25, row + .3);
     const n = acquireVisual("coin", "coin-pop");
     if (!n) return;
-    n.textContent = `◆ +${amount}`; n.style.left = `${point.x * 100}%`; n.style.top = `${point.y * 100}%`;
+    n.textContent = `+${amount}`; n.style.left = `${point.x * 100}%`; n.style.top = `${point.y * 100}%`;
     setTimeout(() => releaseVisual("coin", n), 1050);
   }
 
@@ -2073,10 +2075,33 @@
     return chosen;
   }
 
+  function choosePauseTip() {
+    const wallRatio = WALL_MAX_HP > 0 ? state.wallHp / WALL_MAX_HP : 0;
+    const eligible = INTERMISSION_TIPS.filter(tip => {
+      if (tip.lowWallOnly && wallRatio >= .5) return false;
+      if (tip.desktopOnly && !window.matchMedia("(hover: hover) and (pointer: fine)").matches) return false;
+      if (tip.minLevel && state.level < tip.minLevel) return false;
+      if (tip.enemy && !levelIncludesEnemy(state.level, tip.enemy)) return false;
+      return true;
+    });
+    let pool = eligible.filter(tip => !state.shownPauseTipIds.includes(tip.id));
+    if (!pool.length) {
+      state.shownPauseTipIds = [];
+      pool = eligible.filter(tip => tip.id !== state.lastPauseTipId);
+    }
+    if (!pool.length) pool = eligible;
+    const chosen = pool[Math.floor(Math.random() * pool.length)] || INTERMISSION_TIPS[0];
+    state.lastPauseTipId = chosen.id;
+    state.shownPauseTipIds.push(chosen.id);
+    return chosen;
+  }
+
   function hideResultTip() {
     els.result.classList.remove("level-complete");
     els.resultTip.hidden = true;
     els.resultTipText.textContent = "";
+    if (els.pausePerformance) els.pausePerformance.hidden = true;
+    if (els.pausePerformanceText) els.pausePerformanceText.textContent = "";
   }
 
   function endGame(won) {
@@ -2218,17 +2243,20 @@
 
   function showPauseMenu() {
     const preview = currentLevelPerformancePreview();
+    const pauseTip = choosePauseTip();
     state.paused = true;
     resultAction = "resume";
     hideResultTip();
     els.resultKicker.textContent = `第${levelDisplayName(state.level)}關防守中`;
     els.resultTitle.textContent = "遊戲暫停";
-    els.resultSubtitle.textContent = `當前表現預估 +${preview.bonus.toLocaleString("zh-TW")}｜目前總分 ${Math.floor(state.score).toLocaleString("zh-TW")}`;
+    els.resultSubtitle.textContent = "調整設定或查看戰況後繼續防守";
     els.resultKills.textContent = state.kills;
     els.resultTime.textContent = formatTime(Math.floor(state.elapsed));
-    els.resultTipTitle.textContent = "當前表現";
-    els.resultTipText.textContent = `本關進度 ${Math.round(preview.progress * 100)}%｜城牆保存 ${Math.round(preview.wallPreservation * 100)}%｜繼續防守後分數會依戰況更新。`;
+    els.resultTipTitle.textContent = "Tips";
+    els.resultTipText.textContent = pauseTip.text;
     els.resultTip.hidden = false;
+    els.pausePerformanceText.textContent = `表現預估 +${preview.bonus.toLocaleString("zh-TW")}｜目前總分 ${Math.floor(state.score).toLocaleString("zh-TW")}｜本關進度 ${Math.round(preview.progress * 100)}%｜城牆保存 ${Math.round(preview.wallPreservation * 100)}%`;
+    els.pausePerformance.hidden = false;
     els.restart.textContent = "繼續防守";
     els.restart.disabled = false;
     els.result.classList.add("show", "pause-menu");

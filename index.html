@@ -11,7 +11,8 @@
   <meta name="description" content="6×8 縱向俯視棋盤格塔防遊戲" />
   <link rel="manifest" href="manifest.webmanifest?v=20260718-portrait-v1" />
   <link rel="apple-touch-icon" href="assets/processed/icons/player-warrior-icon-45.png" />
-  <link rel="stylesheet" href="styles.css?v=20260720-visual-quality-v34" />
+  <link rel="preload" as="image" href="assets/source/Cover_Image.png" />
+  <link rel="stylesheet" href="styles.css?v=20260722-pause-ui-v36" />
 </head>
 <body>
   <main id="app" class="app game-blur-target">
@@ -147,9 +148,6 @@
   <section id="titleScreen" class="title-screen" aria-label="遊戲標題畫面">
     <div class="title-vignette"></div>
     <div class="title-content">
-      <p class="eyebrow">A FORTRESS DEFENSE GAME</p>
-      <h1><span>EMBER</span><b>WATCH</b></h1>
-      <h2>地城守望</h2>
       <button id="continueButton" class="continue-button" type="button" disabled aria-busy="true">Loading 0%</button>
       <div id="preloadStatus" class="preload-status" role="status" aria-live="polite" aria-label="遊戲資源載入進度">
         <div class="preload-status-row">
@@ -191,11 +189,15 @@
         <strong id="resultTipTitle">守城提示</strong>
         <span id="resultTipText"></span>
       </aside>
+      <aside id="pausePerformance" class="pause-performance" hidden>
+        <strong>當前表現</strong>
+        <span id="pausePerformanceText"></span>
+      </aside>
       <button id="restartButton" class="restart-button" type="button">再玩一次</button>
     </div>
   </section>
 
   <script src="game-config.js?v=20260720-attack-names-v23"></script>
-  <script src="game.js?v=20260720-visual-quality-v48"></script>
+  <script src="game.js?v=20260722-pause-ui-v49"></script>
 </body>
 </html>
